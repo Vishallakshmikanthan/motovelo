@@ -1,0 +1,20 @@
+# Reference APK (large third-party binary, excluded from repo)
+Monoposto.apk
+
+# Node / Web build artifacts
+motovelo-web/node_modules/
+motovelo-web/dist/
+*.log
+
+# Android build artifacts & local SDK config
+motovelo-android/.gradle/
+motovelo-android/build/
+motovelo-android/app/build/
+motovelo-android/local.properties
+motovelo-android/app/src/main/assets/www/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
