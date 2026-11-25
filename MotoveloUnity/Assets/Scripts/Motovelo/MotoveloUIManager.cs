@@ -67,6 +67,10 @@ namespace Motovelo
         private GameObject _startLightsWrap;
         private GameObject _flBannerWrap;
         private Text _flBannerTxt;
+        private GameObject _pitStatusBannerWrap;
+        private Image _pitStatusBannerBg;
+        private Text _pitStatusBannerTxt;
+        private Text _nextTyreBtnTxt;
         private Text _hudSpeedTxt;
         private Text _hudGearTxt;
         private Text _hudTimeTxt;
@@ -74,6 +78,8 @@ namespace Motovelo
         private Text _hudSectorsTxt;
         private Image _ersBarFill;
         private Image _drsBadgeBg;
+        private Text _drsBadgeTxt;
+        private Text _sfxBtnTxt;
         private Image _pitBtnBg;
         private readonly Image[] _rpmDots = new Image[11];
 
@@ -452,7 +458,15 @@ namespace Motovelo
             _flBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-230, -84), new Vector2(230, -20), new Color(0.54f, 0.08f, 0.78f, 0.94f), true);
             _flBannerTxt = CreateLabel(_flBannerWrap.transform, "FASTEST LAP", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-10, 0));
 
-            // Top-Right Action Pills (TOWER, CAM, PAUSE — crisp clean text badges, zero emojis!)
+            // Live FIA Pit Lane, Pit Crew Stopwatch & Stewards Regulation Banner!
+            _pitStatusBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-340, -152), new Vector2(340, -92), new Color(0.06f, 0.08f, 0.12f, 0.94f), true);
+            _pitStatusBannerBg = _pitStatusBannerWrap.GetComponent<Image>();
+            _pitStatusBannerTxt = CreateLabel(_pitStatusBannerWrap.transform, "", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(14, 0), new Vector2(-14, 0));
+            _pitStatusBannerWrap.SetActive(false);
+
+            // Top-Right Action Pills (SFX, TOWER, CAM, PAUSE — crisp clean text badges, zero emojis!)
+            var sfxGo = CreateActionButton(_panelHud.transform, "SFX ON", new Vector2(1, 1), new Vector2(-458, -46), new Vector2(104, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { if (_gm.audioSynth != null) { _gm.audioSynth.audioEnabled = !_gm.audioSynth.audioEnabled; if (_sfxBtnTxt != null) _sfxBtnTxt.text = _gm.audioSynth.audioEnabled ? "SFX ON" : "MUTED"; } });
+            _sfxBtnTxt = sfxGo.GetComponentInChildren<Text>();
             CreateActionButton(_panelHud.transform, "TOWER", new Vector2(1, 1), new Vector2(-340, -46), new Vector2(108, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { _gm.fullLeaderboard = !_gm.fullLeaderboard; _gm.audioSynth?.TriggerClick(); });
             CreateActionButton(_panelHud.transform, "CAM",   new Vector2(1, 1), new Vector2(-218, -46), new Vector2(108, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { _gm.cameraRig.CycleCamera(); _gm.audioSynth?.TriggerClick(); });
             CreateActionButton(_panelHud.transform, "II",    new Vector2(1, 1), new Vector2(-96,  -46), new Vector2(88,  46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => _gm.SetScreenState(MotoveloScreenState.Paused));
@@ -472,9 +486,9 @@ namespace Motovelo
             _hudGearTxt = CreateLabel(cluster.transform, "N", 62, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.85f), new Vector2(-50, 0), new Vector2(50, 0));
             _hudSpeedTxt = CreateLabel(cluster.transform, "0 KPH", 26, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.35f, 1f, 0.55f), new Vector2(0, 0.44f), new Vector2(0.45f, 0.82f), new Vector2(16, 0), Vector2.zero);
 
-            var drsPill = CreatePanel(cluster.transform, new Vector2(0.58f, 0.50f), new Vector2(0.95f, 0.76f), Vector2.zero, Vector2.zero, new Color(0.16f, 0.18f, 0.22f, 0.9f), true);
+            var drsPill = CreatePanel(cluster.transform, new Vector2(0.56f, 0.50f), new Vector2(0.96f, 0.76f), Vector2.zero, Vector2.zero, new Color(0.16f, 0.18f, 0.22f, 0.9f), true);
             _drsBadgeBg = drsPill.GetComponent<Image>();
-            CreateLabel(drsPill.transform, "DRS", 16, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            _drsBadgeTxt = CreateLabel(drsPill.transform, "DRS", 14, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
             _hudTimeTxt = CreateLabel(cluster.transform, "LAP  00:00.000", 16, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(0, 0.22f), new Vector2(1, 0.42f), new Vector2(16, 0), new Vector2(-16, 0));
             _hudBestTxt = CreateLabel(cluster.transform, "BEST --:--.---", 15, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.35f, 1f, 0.55f), new Vector2(0, 0.22f), new Vector2(1, 0.42f), new Vector2(16, 0), new Vector2(-16, 0));
@@ -493,13 +507,15 @@ namespace Motovelo
             _btnBrake = CreateHoldControl(_panelHud.transform, "BRAKE", new Vector2(1, 0), new Vector2(-304, 112), new Vector2(158, 128), 20, new Color(0.90f, 0.16f, 0.20f, 0.28f), false);
             _btnGas   = CreateHoldControl(_panelHud.transform, "GAS",   new Vector2(1, 0), new Vector2(-118, 134), new Vector2(148, 174), 22, new Color(0.18f, 0.90f, 0.42f, 0.28f), false);
 
-            _btnErs   = CreateHoldControl(_panelHud.transform, "ERS",   new Vector2(0.5f, 0), new Vector2(-180, 96), new Vector2(96, 96), 20, new Color(0.18f, 0.55f, 1.0f, 0.45f), true);
-            _btnDrs   = CreateHoldControl(_panelHud.transform, "DRS",   new Vector2(0.5f, 0), new Vector2(180,  96), new Vector2(96, 96), 20, new Color(0.16f, 0.88f, 0.40f, 0.40f), true);
-            _btnRear  = CreateHoldControl(_panelHud.transform, "REAR",  new Vector2(0.5f, 0), new Vector2(-60,  86), new Vector2(82, 82), 16, new Color(1f, 1f, 1f, 0.20f), true);
+            _btnErs   = CreateHoldControl(_panelHud.transform, "ERS",   new Vector2(0.5f, 0), new Vector2(-195, 96), new Vector2(96, 96), 20, new Color(0.18f, 0.55f, 1.0f, 0.45f), true);
+            _btnDrs   = CreateHoldControl(_panelHud.transform, "DRS",   new Vector2(0.5f, 0), new Vector2(195,  96), new Vector2(96, 96), 20, new Color(0.16f, 0.88f, 0.40f, 0.40f), true);
+            _btnRear  = CreateHoldControl(_panelHud.transform, "REAR",  new Vector2(0.5f, 0), new Vector2(-74,  86), new Vector2(82, 82), 16, new Color(1f, 1f, 1f, 0.20f), true);
 
-            var pitGo = CreateActionButton(_panelHud.transform, "PIT", new Vector2(0.5f, 0), new Vector2(60, 86), new Vector2(82, 82), new Color(1f, 1f, 1f, 0.20f), () => _gm.RequestPitStop());
-            _pitBtnBg = pitGo.GetComponent<Image>();
-            _pitBtnBg.sprite = _circleSprite;
+            // Pit Radio Next-Tyre Strategy Selector (NO fake instant pit button — drive physically into the Pit Entry Lane to pit!)
+            var nextTyreGo = CreateActionButton(_panelHud.transform, "NEXT: MED", new Vector2(0.5f, 0), new Vector2(58, 86), new Vector2(138, 62), new Color(0.14f, 0.16f, 0.22f, 0.85f), () => _gm.CycleNextPitCompound());
+            _pitBtnBg = nextTyreGo.GetComponent<Image>();
+            _nextTyreBtnTxt = nextTyreGo.GetComponentInChildren<Text>();
+            if (_nextTyreBtnTxt != null) _nextTyreBtnTxt.fontSize = 15;
         }
 
         // =====================================================================
@@ -632,8 +648,79 @@ namespace Motovelo
             _hudBestTxt.text = $"BEST {FormatTime(car.bestLapTime)}";
 
             _ersBarFill.fillAmount = car.ersCharge;
-            _drsBadgeBg.color = car.drsActive ? new Color(0.12f, 0.88f, 0.34f, 1f) : new Color(0.16f, 0.18f, 0.22f, 0.9f);
-            _pitBtnBg.color = car.pitRequested ? new Color(0.98f, 0.78f, 0.12f, 0.85f) : new Color(1f, 1f, 1f, 0.20f);
+            _ersBarFill.color = car.ersActive
+                ? new Color(0.20f, 1.0f, 0.65f, 1f)
+                : (car.ersHarvesting ? new Color(0.75f, 0.38f, 1.0f, 1f) : new Color(0.15f, 0.86f, 1f, 1f));
+
+            if (car.drsActive)
+            {
+                _drsBadgeBg.color = new Color(0.10f, 0.88f, 0.34f, 1f);
+                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS OPEN";
+            }
+            else if (car.inDrsZone)
+            {
+                float pulse = 0.65f + Mathf.Sin(Time.time * 9f) * 0.25f;
+                _drsBadgeBg.color = new Color(0.18f, 0.62f, 0.24f, pulse);
+                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS ZONE [F]";
+            }
+            else
+            {
+                _drsBadgeBg.color = new Color(0.16f, 0.18f, 0.22f, 0.9f);
+                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS";
+            }
+
+            // Next Pit Compound Strategy Pill
+            var nextComp = MotoveloDatabase.Compounds[Mathf.Clamp(car.nextPitCompoundIdx, 0, MotoveloDatabase.Compounds.Length - 1)];
+            if (_nextTyreBtnTxt != null) _nextTyreBtnTxt.text = $"NEXT: {nextComp.label}";
+            if (_pitBtnBg != null) _pitBtnBg.color = new Color(nextComp.color.r * 0.65f, nextComp.color.g * 0.65f, nextComp.color.b * 0.65f, 0.82f);
+
+            // Live FIA Pit Crew Stopwatch, Pit Limiter, Pit Entry Approach & Stewards Regulation Banner!
+            if (_pitStatusBannerWrap != null && _gm.activeTrack != null)
+            {
+                float signedS = _gm.activeTrack.GetSignedS(car.projection.s);
+                string sideWord = _gm.activeTrack.pitSide > 0f ? "RIGHT" : "LEFT";
+
+                if (car.pitPhase == PitLanePhase.ServicingInBox)
+                {
+                    _pitStatusBannerWrap.SetActive(true);
+                    _pitStatusBannerBg.color = new Color(0.08f, 0.58f, 0.24f, 0.95f);
+                    string action = car.pitServiceTimer < 1.25f ? $"REMOVING TYRES -> FITTING {nextComp.label}" : $"{car.compound.label} FITTED — DROPPING JACKS";
+                    _pitStatusBannerTxt.text = $"PIT STOP  •  {car.pitServiceTimer:F2}s  •  {action}";
+                }
+                else if (car.pitPhase == PitLanePhase.EnteringPitLane)
+                {
+                    _pitStatusBannerWrap.SetActive(true);
+                    _pitStatusBannerBg.color = new Color(0.88f, 0.58f, 0.04f, 0.95f);
+                    _pitStatusBannerTxt.text = $"PIT LANE LIMITER 80 KPH  •  CREW READY WITH {nextComp.label} TYRES (TAP NEXT TO CHANGE)";
+                }
+                else if (car.pitPhase == PitLanePhase.ExitingPitLane)
+                {
+                    _pitStatusBannerWrap.SetActive(true);
+                    _pitStatusBannerBg.color = new Color(0.10f, 0.72f, 0.30f, 0.95f);
+                    _pitStatusBannerTxt.text = $"PIT EXIT  •  80 KPH LIMITER  •  STAY OUTSIDE WHITE LINE";
+                }
+                else if (car.fiaNoticeTimer > 0f && !string.IsNullOrEmpty(car.fiaNotice))
+                {
+                    _pitStatusBannerWrap.SetActive(true);
+                    bool isPenalty = car.fiaNotice.Contains("PENALTY") || car.fiaNotice.Contains("WARNING");
+                    _pitStatusBannerBg.color = isPenalty ? new Color(0.84f, 0.10f, 0.14f, 0.95f) : new Color(0.12f, 0.16f, 0.24f, 0.94f);
+                    _pitStatusBannerTxt.text = car.fiaNotice;
+                }
+                else if (!inCountdown && ((signedS >= -360f && signedS <= -120f) || (signedS >= -40f && signedS <= 78f)))
+                {
+                    _pitStatusBannerWrap.SetActive(true);
+                    bool needMandatory = _gm.selectedLaps >= 3 && !car.MandatoryCompoundSatisfied && car.lap >= 2;
+                    _pitStatusBannerBg.color = needMandatory || car.tyreHealth < 48f
+                        ? new Color(0.90f, 0.54f, 0.05f, 0.94f)
+                        : new Color(0.10f, 0.14f, 0.20f, 0.88f);
+                    string regTag = needMandatory ? "MANDATORY 2-COMPOUND RULE: " : "";
+                    _pitStatusBannerTxt.text = $"{regTag}PIT LANE OPEN ON {sideWord} — STEER {sideWord} ACROSS AMBER ARROWS TO CHANGE TYRES";
+                }
+                else
+                {
+                    _pitStatusBannerWrap.SetActive(false);
+                }
+            }
 
             float rpmFrac = Mathf.Clamp01((car.rpm - 5000f) / 8200f);
             int lit = Mathf.RoundToInt(rpmFrac * 11f);
@@ -646,7 +733,7 @@ namespace Motovelo
             }
 
             _hudFrameCount++;
-            if (_hudFrameCount % 6 == 0)
+            if (_hudFrameCount == 1 || _hudFrameCount % 6 == 0)
             {
                 if (_gm.yellowFlagSector > 0)
                 {
@@ -673,7 +760,8 @@ namespace Motovelo
                 for (int i = start; i < Mathf.Min(standings.Count, start + maxRows); i++)
                 {
                     var c = standings[i];
-                    string gap = c.inPit ? "PIT" : (i == 0 ? "LEADER" : $"+{Mathf.Max(0f, (leadProg - c.totalProgress) * 58f):F2}s");
+                    string penTag = c.timePenaltySeconds > 0f ? $" +{c.timePenaltySeconds:F0}sP" : "";
+                    string gap = c.inPit ? "PIT" : (i == 0 ? $"LEADER{penTag}" : $"+{Mathf.Max(0f, (leadProg - c.totalProgress) * 58f + c.timePenaltySeconds):F2}s{penTag}");
                     string prefix = c.isPlayer ? "<color=#38FF6A>> " : "  ";
                     string suffix = c.isPlayer ? "</color>" : "";
                     sb.AppendLine($"{prefix}{i + 1:D2}  {c.driver.code}  [{c.compound.shortLetter}]  {gap}{suffix}");
