@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#0a0b0f" />
-  <title>MOTOVELO — Formula Motorsport</title>
+  <title>MOTOVELO — Monoposto Formula Racing</title>
 </head>
 <body>
   <canvas id="game-canvas"></canvas>
@@ -12,9 +12,9 @@
   <!-- LOADING SCREEN -->
   <div id="screen-loading" class="screen active">
     <div class="brand-lockup">
-      <div class="brand-badge">FORMULA GRAND PRIX</div>
+      <div class="brand-badge">2026 FORMULA CHAMPIONSHIP</div>
       <h1 class="brand-title">MOTO<span>VELO</span></h1>
-      <div class="brand-sub">APEX AERODYNAMICS // TELEMETRY ENGINE</div>
+      <div class="brand-sub">MONOPOSTO EDITION // 2026 LIVERIES &amp; DRIVERS</div>
     </div>
     <div class="loader-wrap">
       <div class="loader-bar"><div id="loader-fill"></div></div>
@@ -24,83 +24,298 @@
 
   <!-- MAIN MENU -->
   <div id="screen-menu" class="screen">
-    <div class="menu-topbar">
-      <div class="menu-brand">MOTO<span>VELO</span> <small>GP26</small></div>
+    <div class="mono-topbar">
+      <div class="mono-brand">MOTO<span>VELO</span> <small>2026</small></div>
       <div class="menu-status">
-        <span id="menu-team-pill" class="pill">SCUDERIA VELOCE</span>
-        <span id="menu-champ-pill" class="pill gold">CHAMP: 0 PTS</span>
+        <span id="menu-team-pill" class="mono-pill">REDBULL RACING</span>
+        <span id="menu-champ-pill" class="mono-pill gold">CHAMP: 0 PTS</span>
       </div>
     </div>
 
     <div class="menu-hero">
       <div class="menu-nav">
-        <button id="btn-play" class="nav-btn primary">
-          <span class="nav-kicker">INSTANT GRID</span>
-          <span class="nav-label">QUICK RACE</span>
+        <button id="btn-quick-race" class="mono-menu-btn primary">
+          <span class="kicker">2026 GRAND PRIX</span>
+          <span class="label">QUICK RACE</span>
         </button>
-        <button id="btn-championship" class="nav-btn">
-          <span class="nav-kicker">3-ROUND SERIES</span>
-          <span class="nav-label">CHAMPIONSHIP</span>
+        <button id="btn-championship" class="mono-menu-btn">
+          <span class="kicker">WORLD SERIES</span>
+          <span class="label">CHAMPIONSHIP</span>
         </button>
-        <button id="btn-timetrial" class="nav-btn">
-          <span class="nav-kicker">SOLO HOTLAP</span>
-          <span class="nav-label">TIME TRIAL</span>
+        <button id="btn-timetrial" class="mono-menu-btn">
+          <span class="kicker">SOLO HOTLAP</span>
+          <span class="label">TIME TRIAL</span>
         </button>
-        <button id="btn-garage" class="nav-btn">
-          <span class="nav-kicker">6 TEAMS // LIVERIES</span>
-          <span class="nav-label">GARAGE</span>
+        <button id="btn-customize" class="mono-menu-btn">
+          <span class="kicker">11 TEAMS // 22 DRIVERS</span>
+          <span class="label">CAR &amp; DRIVER SELECT</span>
         </button>
         <div class="nav-row">
-          <button id="btn-settings" class="nav-btn small">SETTINGS</button>
-          <button id="btn-credits" class="nav-btn small">CREDITS</button>
-        </div>
-      </div>
-
-      <div class="menu-quick-config">
-        <div class="config-card">
-          <div class="config-title">CIRCUIT SELECT</div>
-          <div id="circuit-selector" class="chip-group"></div>
-          <div id="circuit-desc" class="config-desc"></div>
-          <div class="config-row">
-            <div>
-              <div class="config-title">LAPS</div>
-              <div id="laps-selector" class="chip-group compact">
-                <button class="chip" data-laps="2">2</button>
-                <button class="chip active" data-laps="3">3</button>
-                <button class="chip" data-laps="5">5</button>
-              </div>
-            </div>
-            <div>
-              <div class="config-title">AI DIFFICULTY</div>
-              <div id="diff-selector" class="chip-group compact">
-                <button class="chip" data-diff="0">ROOKIE</button>
-                <button class="chip active" data-diff="1">PRO</button>
-                <button class="chip" data-diff="2">LEGEND</button>
-              </div>
-            </div>
-          </div>
+          <button id="btn-settings" class="mono-menu-btn small">SETTINGS</button>
+          <button id="btn-laps-cycle" class="mono-menu-btn small">LAPS: 5</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- GARAGE SCREEN -->
-  <div id="screen-garage" class="screen">
-    <div class="menu-topbar">
-      <button id="btn-garage-back" class="back-btn">← BACK</button>
-      <div class="menu-brand">MOTOVELO <span>GARAGE</span></div>
-      <div class="pill" id="garage-selected-tag">ACTIVE CAR</div>
+  <!-- CAR SELECTION SCREEN (EXACT MONOPOSTO LAYOUT) -->
+  <div id="screen-car-select" class="screen mono-stage">
+    <div class="stage-top">
+      <div class="stage-top-left">
+        <button id="btn-car-back" class="mono-sq-btn">❮</button>
+        <div class="mono-crumb"><span class="crumb-dot"></span>CAR SELECTION</div>
+      </div>
+      <div class="stage-top-right">
+        <button id="btn-car-edit" class="mono-sq-btn" title="Driver &amp; Helmet">✎</button>
+        <button id="btn-car-zoom" class="mono-sq-btn red-sq" title="Zoom / Inspect">🔍</button>
+      </div>
     </div>
-    <div class="garage-layout">
-      <div id="garage-team-list" class="team-list"></div>
-      <div class="garage-specs">
-        <h2 id="spec-team-name">SCUDERIA VELOCE</h2>
-        <div id="spec-driver" class="spec-sub">DRIVER #16 // MONZA SPEC</div>
-        <div class="stat-bar"><span>ENGINE POWER</span><div class="bar"><div id="stat-power"></div></div></div>
-        <div class="stat-bar"><span>AERO DOWNFORCE</span><div class="bar"><div id="stat-aero"></div></div></div>
-        <div class="stat-bar"><span>TIRE GRIP</span><div class="bar"><div id="stat-grip"></div></div></div>
-        <div class="stat-bar"><span>CHASSIS AGILITY</span><div class="bar"><div id="stat-agility"></div></div></div>
-        <button id="btn-garage-race" class="nav-btn primary" style="margin-top:14px;">RACE THIS CAR →</button>
+
+    <div class="team-arrow-wrap">
+      <div class="team-logo-box"><img id="car-team-logo" src="./textures/logos/redbull.png" alt="Team Logo" /></div>
+      <div class="red-arrow-banner"><span id="car-team-name">Redbull Racing</span></div>
+    </div>
+
+    <button id="btn-car-prev" class="carousel-arrow left"><span class="checker-trail"></span><span class="arrow-circle">❮</span></button>
+    <button id="btn-car-next" class="carousel-arrow right"><span class="arrow-circle">❯</span><span class="checker-trail"></span></button>
+
+    <div class="stage-bottom">
+      <button id="btn-car-options" class="mono-hint-pill">💬 Click here for more Options</button>
+      <button id="btn-car-continue" class="mono-continue-btn">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- DRIVER SELECTION SCREEN (EXACT MONOPOSTO LAYOUT) -->
+  <div id="screen-driver-select" class="screen mono-stage dark-streaks">
+    <div class="stage-top">
+      <div class="stage-top-left">
+        <button id="btn-driver-back" class="mono-sq-btn">❮</button>
+        <div class="mono-crumb"><span class="crumb-dot"></span>DRIVER SELECTION</div>
+      </div>
+      <div class="stage-top-right">
+        <button id="btn-driver-zoom" class="mono-sq-btn red-sq" title="Zoom Helmet">🔍</button>
+      </div>
+    </div>
+
+    <div class="driver-arrow-wrap">
+      <div class="driver-portrait-box"><img id="driver-portrait-img" src="./textures/drivers/verstappen.webp" alt="Driver" /></div>
+      <div class="red-arrow-banner"><span id="driver-name-banner">Max Verstappen</span></div>
+    </div>
+
+    <button id="btn-driver-prev" class="carousel-arrow left"><span class="checker-trail"></span><span class="arrow-circle">❮</span></button>
+    <button id="btn-driver-next" class="carousel-arrow right"><span class="arrow-circle">❯</span><span class="checker-trail"></span></button>
+
+    <div class="stage-bottom">
+      <div class="driver-custom-btns">
+        <button id="btn-load-helmet" class="mono-dark-pill">LOAD HELMET</button>
+        <button id="btn-load-suit" class="mono-dark-pill">LOAD SUIT</button>
+      </div>
+      <button id="btn-driver-continue" class="mono-continue-btn">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- TRACK SELECTION SCREEN (EXACT MONOPOSTO CARD CAROUSEL) -->
+  <div id="screen-track-select" class="screen mono-stage dark-red-bg">
+    <div class="stage-top">
+      <div class="stage-top-left">
+        <button id="btn-track-back" class="mono-sq-btn">❮</button>
+        <div class="mono-crumb"><span class="crumb-dot"></span>TRACK SELECTION</div>
+      </div>
+    </div>
+
+    <div id="track-carousel" class="track-carousel"></div>
+
+    <div class="stage-bottom end">
+      <button id="btn-track-continue" class="mono-continue-btn">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- CAR SETUP SCREEN (EXACT MONOPOSTO SLIDERS & 5 TYRE CARDS) -->
+  <div id="screen-car-setup" class="screen mono-stage setup-bg">
+    <div class="stage-top">
+      <div class="stage-top-left">
+        <button id="btn-setup-back" class="mono-sq-btn">❮</button>
+        <div class="mono-crumb"><span class="crumb-dot"></span>CAR SETUP</div>
+      </div>
+      <div class="track-cond-pill">💬 TRACK CONDITION: NO RAIN</div>
+      <div style="width:44px"></div>
+    </div>
+
+    <div class="setup-sliders-row">
+      <div class="setup-col">
+        <div class="setup-title"><span class="mini-check"></span>WINGS SETUP</div>
+        <div class="slider-wrap">
+          <input id="slider-wings" type="range" min="-50" max="50" value="-20" class="mono-slider" />
+          <div id="val-wings" class="slider-badge">-20</div>
+        </div>
+        <div class="slider-ends"><span>SPEED</span><span>GRIP</span></div>
+      </div>
+      <div class="setup-divider"></div>
+      <div class="setup-col">
+        <div class="setup-title"><span class="mini-check"></span>BRAKE BALANCE</div>
+        <div class="slider-wrap">
+          <input id="slider-brake" type="range" min="-50" max="50" value="-16" class="mono-slider" />
+          <div id="val-brake" class="slider-badge">-16</div>
+        </div>
+        <div class="slider-ends"><span>FRONT</span><span>REAR</span></div>
+      </div>
+      <div class="setup-divider"></div>
+      <div class="setup-col">
+        <div class="setup-title"><span class="mini-check"></span>SUSPENSION</div>
+        <div class="slider-wrap">
+          <input id="slider-susp" type="range" min="-50" max="50" value="0" class="mono-slider" />
+          <div id="val-susp" class="slider-badge">0</div>
+        </div>
+        <div class="slider-ends"><span>LOW</span><span>HIGH</span></div>
+      </div>
+    </div>
+
+    <div id="tyre-cards-row" class="tyre-cards-row"></div>
+
+    <div class="stage-bottom end">
+      <button id="btn-setup-start" class="mono-continue-btn">CONTINUE</button>
+    </div>
+  </div>
+
+  <!-- STARTING GRID INTRO OVERLAY (EXACT MONOPOSTO BROADCAST CARD) -->
+  <div id="screen-grid-intro" class="screen grid-intro-overlay">
+    <div class="grid-title">STARTING GRID</div>
+    <div class="grid-driver-card">
+      <img id="grid-driver-portrait" class="grid-portrait" src="./textures/drivers/verstappen.webp" alt="Driver" />
+      <div class="grid-info-bar">
+        <div class="grid-pos-box">
+          <div id="grid-pos-num" class="grid-pos-num">1</div>
+          <img id="grid-team-logo" class="grid-team-logo" src="./textures/logos/redbull.png" alt="Logo" />
+        </div>
+        <div class="grid-text-col">
+          <div id="grid-driver-name" class="grid-driver-name">Max Verstappen</div>
+          <div id="grid-team-name" class="grid-team-name">Redbull Racing</div>
+          <div id="grid-quali-time" class="grid-quali-time">00:55.421</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IN-RACE HUD (EXACT MONOPOSTO BROADCAST HUD) -->
+  <div id="screen-hud" class="screen hud-layer">
+    <!-- Top-Left Leaderboard Tower -->
+    <div id="mono-tower" class="mono-tower">
+      <div id="tower-header" class="tower-header">MOTOVELO</div>
+      <div class="tower-sub">
+        <span id="hud-lap">LAP 1/5</span>
+        <span id="hud-session">RACE</span>
+      </div>
+      <div id="tower-rows" class="tower-rows"></div>
+    </div>
+
+    <!-- Top-Left Circular Radar Minimap -->
+    <div class="minimap-circle-wrap">
+      <canvas id="minimap-canvas" width="124" height="124"></canvas>
+    </div>
+
+    <!-- Top-Center Fastest Lap Banner -->
+    <div id="fastest-lap-banner" class="fastest-lap-banner hidden">
+      <div class="fl-top">FASTEST LAP</div>
+      <div class="fl-body">
+        <div class="fl-left">
+          <div id="fl-driver" class="fl-driver">Oscar Piastri</div>
+          <div class="fl-times"><span id="fl-time">00:58.571</span> <span id="fl-delta" class="fl-delta">-0.621</span></div>
+        </div>
+        <img id="fl-logo" class="fl-logo" src="./textures/logos/mclaren.png" alt="" />
+      </div>
+    </div>
+
+    <!-- Top-Center 5 Large Circular Red Start Lights -->
+    <div id="start-lights" class="mono-start-lights hidden">
+      <div class="mono-pod"><div class="mono-lens"></div></div>
+      <div class="mono-pod"><div class="mono-lens"></div></div>
+      <div class="mono-pod"><div class="mono-lens"></div></div>
+      <div class="mono-pod"><div class="mono-lens"></div></div>
+      <div class="mono-pod"><div class="mono-lens"></div></div>
+    </div>
+
+    <!-- Center Track & Race Banner -->
+    <div id="race-banner" class="mono-race-banner hidden">
+      <div id="banner-track-name" class="bn-track">DUNE COAST</div>
+      <div id="banner-country" class="bn-country">(NETHERLANDS)</div>
+      <div id="banner-mode" class="bn-mode">Race</div>
+    </div>
+
+    <!-- Top-Right Action Icons + Sector Timing + Telemetry Cluster -->
+    <div class="hud-top-right">
+      <div class="hud-icon-row">
+        <button id="btn-hud-tv" class="mono-hud-icon" title="Toggle Full Leaderboard">📺</button>
+        <button id="btn-hud-cam" class="mono-hud-icon" title="Switch Camera">🎥</button>
+        <button id="btn-hud-pause" class="mono-hud-icon" title="Pause / Settings">⚙</button>
+      </div>
+
+      <div class="mono-timing-box">
+        <div class="sector-row">
+          <div id="sec-s1" class="sec-cell">S1</div>
+          <div id="sec-s2" class="sec-cell">S2</div>
+          <div id="sec-s3" class="sec-cell">S3</div>
+        </div>
+        <div class="timing-lines">
+          <div class="t-line"><span class="t-lbl">CURRENT TIME</span><span id="hud-time" class="t-val">00:00.000</span></div>
+          <div class="t-line"><span class="t-lbl green">BEST TIME</span><span id="hud-best" class="t-val">--:--.---</span></div>
+          <div class="t-line"><span class="t-lbl purple">FASTEST TIME</span><span id="hud-fastest" class="t-val">--:--.---</span></div>
+          <div class="t-line"><span class="t-lbl yellow">DELTA TIME</span><span id="hud-delta" class="t-val">--.---</span></div>
+        </div>
+      </div>
+
+      <div class="mono-cluster">
+        <div class="cluster-top-row">
+          <div class="spd-block"><span id="hud-kph" class="spd-num">0</span><small>KPH</small></div>
+          <div id="rpm-leds" class="mono-rpm-leds"></div>
+          <div class="spd-block right"><span id="hud-mph" class="spd-num green">0</span><small>MPH</small></div>
+        </div>
+        <div class="cluster-mid-row">
+          <div class="car-dmg-wrap">
+            <svg viewBox="0 0 64 28" class="car-dmg-svg">
+              <rect x="6" y="10" width="52" height="8" rx="3" fill="#22ff44"/>
+              <rect x="12" y="2" width="12" height="6" rx="2" fill="#22ff44"/>
+              <rect x="12" y="20" width="12" height="6" rx="2" fill="#22ff44"/>
+              <rect x="42" y="2" width="12" height="6" rx="2" fill="#22ff44"/>
+              <rect x="42" y="20" width="12" height="6" rx="2" fill="#22ff44"/>
+              <rect x="2" y="5" width="5" height="18" rx="1" fill="#22ff44"/>
+              <rect x="57" y="7" width="4" height="14" rx="1" fill="#22ff44"/>
+            </svg>
+          </div>
+          <div id="hud-gear" class="mono-gear">N</div>
+          <div class="tyre-temp-wrap">
+            <span id="hud-tyre-temp" class="tyre-temp-num">86°</span>
+            <div id="hud-tyre-ring" class="tyre-ring-icon"></div>
+          </div>
+        </div>
+        <div class="cluster-bot-row">
+          <div class="mini-bar"><div id="hud-fuel-bar" class="mini-bar-fill red" style="width:92%"></div></div>
+          <div class="batt-icon"><div id="hud-ers-bar" class="batt-fill" style="width:100%"></div></div>
+          <div class="mini-bar"><div id="hud-tyre-bar" class="mini-bar-fill cyan" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Monoposto Touch Controls -->
+    <div class="mono-touch-left">
+      <button id="touch-left" class="mono-steer-btn">❮</button>
+      <button id="touch-right" class="mono-steer-btn">❯</button>
+    </div>
+
+    <!-- Flanking ERS Lightning, DRS, Pit & Rear-View Buttons -->
+    <button id="touch-ers-l" class="mono-ers-btn left">⚡</button>
+    <button id="touch-ers-r" class="mono-ers-btn right">⚡</button>
+    <button id="touch-drs" class="mono-drs-btn">DRS</button>
+    <button id="touch-pit" class="mono-pit-btn">PIT</button>
+    <button id="touch-rearview" class="mono-rear-btn" title="Rear View (Hold)">👁</button>
+
+    <div class="mono-touch-right">
+      <div class="gear-paddles" id="gear-paddles">
+        <button id="touch-shift-dn" class="mono-paddle">G-</button>
+        <button id="touch-shift-up" class="mono-paddle">G+</button>
+      </div>
+      <div class="mono-pedals">
+        <button id="touch-brake" class="mono-pedal brake"><span></span><span></span><span></span><span></span></button>
+        <button id="touch-gas" class="mono-pedal gas"><span></span><span></span><span></span><span></span><span></span></button>
       </div>
     </div>
   </div>
@@ -110,133 +325,62 @@
     <div class="modal-card">
       <div class="modal-header">
         <h2>SETTINGS</h2>
-        <button id="btn-settings-close" class="back-btn">✕ CLOSE</button>
+        <button id="btn-settings-close" class="mono-sq-btn">✕</button>
       </div>
       <div class="setting-row">
         <span>TRANSMISSION</span>
-        <div class="chip-group compact" id="set-gearbox">
+        <div class="chip-group" id="set-gearbox">
           <button class="chip active" data-val="auto">AUTO</button>
           <button class="chip" data-val="manual">MANUAL</button>
         </div>
       </div>
       <div class="setting-row">
         <span>GRAPHICS QUALITY</span>
-        <div class="chip-group compact" id="set-quality">
+        <div class="chip-group" id="set-quality">
           <button class="chip" data-val="low">LOW</button>
           <button class="chip active" data-val="high">HIGH</button>
         </div>
       </div>
       <div class="setting-row">
         <span>AUDIO ENGINE</span>
-        <div class="chip-group compact" id="set-audio">
+        <div class="chip-group" id="set-audio">
           <button class="chip active" data-val="on">ON</button>
           <button class="chip" data-val="off">MUTE</button>
         </div>
       </div>
       <div class="setting-row">
-        <span>STEERING SENSITIVITY</span>
-        <input id="set-steer-sens" type="range" min="0.6" max="1.6" step="0.1" value="1.0" />
-      </div>
-      <div class="setting-hint">Desktop Keys: W/↑ Throttle • S/↓ Brake • A/D or ←/→ Steer • Space ERS/DRS • C Camera • Q/E Gears • Esc Pause</div>
-    </div>
-  </div>
-
-  <!-- CREDITS MODAL -->
-  <div id="screen-credits" class="screen modal">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h2>CREDITS</h2>
-        <button id="btn-credits-close" class="back-btn">✕ CLOSE</button>
-      </div>
-      <div class="credits-body">
-        <div class="brand-title" style="font-size:2rem;margin-bottom:8px;">MOTO<span>VELO</span></div>
-        <p>Original 3D Formula Motorsport Simulation</p>
-        <p><strong>3D Asset Pipeline:</strong> Blender 5.2 GLB Production</p>
-        <p><strong>Graphics &amp; Physics:</strong> Three.js WebGL2 PBR + 60Hz Formula Aero Engine</p>
-        <p><strong>Audio:</strong> Real-Time Procedural V6 Turbo Hybrid Web Audio Synth</p>
-        <p><strong>Android Runtime:</strong> Native Android WebViewAssetLoader Immersive Engine</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- RACING HUD -->
-  <div id="screen-hud" class="screen hud-layer">
-    <!-- Top Telemetry Bar -->
-    <div class="hud-top">
-      <div class="hud-box pos-box">
-        <span class="hud-lbl">POS</span>
-        <span id="hud-pos" class="hud-val">1<small>/8</small></span>
-      </div>
-      <div class="hud-box lap-box">
-        <span class="hud-lbl">LAP</span>
-        <span id="hud-lap" class="hud-val">1<small>/3</small></span>
-      </div>
-      <div class="hud-box time-box">
-        <div><span class="hud-lbl">TIME</span> <span id="hud-time">00:00.000</span></div>
-        <div><span class="hud-lbl">BEST</span> <span id="hud-best">--:--.---</span></div>
-      </div>
-      <div class="hud-actions">
-        <button id="btn-hud-cam" class="hud-icon-btn">CAM: CHASE</button>
-        <button id="btn-hud-pause" class="hud-icon-btn">❚❚</button>
-      </div>
-    </div>
-
-    <!-- Starting Lights Overlay -->
-    <div id="start-lights" class="start-lights hidden">
-      <div class="light-pod"><span class="bulb"></span><span class="bulb"></span></div>
-      <div class="light-pod"><span class="bulb"></span><span class="bulb"></span></div>
-      <div class="light-pod"><span class="bulb"></span><span class="bulb"></span></div>
-      <div class="light-pod"><span class="bulb"></span><span class="bulb"></span></div>
-      <div class="light-pod"><span class="bulb"></span><span class="bulb"></span></div>
-    </div>
-    <div id="race-banner" class="race-banner hidden">LIGHTS OUT!</div>
-
-    <!-- Minimap -->
-    <canvas id="minimap-canvas" width="136" height="136"></canvas>
-
-    <!-- Center-Bottom Telemetry Cluster -->
-    <div class="hud-cluster">
-      <div id="rpm-leds" class="rpm-leds"></div>
-      <div class="cluster-main">
-        <div id="hud-gear" class="gear-readout">N</div>
-        <div class="speed-col">
-          <div id="hud-speed" class="speed-val">0</div>
-          <div class="speed-unit">KM/H</div>
+        <span>AI DIFFICULTY</span>
+        <div class="chip-group" id="set-diff">
+          <button class="chip" data-diff="0">ROOKIE</button>
+          <button class="chip active" data-diff="1">PRO</button>
+          <button class="chip" data-diff="2">LEGEND</button>
         </div>
       </div>
-      <div class="ers-wrap">
-        <span class="ers-lbl">ERS</span>
-        <div class="ers-bar"><div id="hud-ers"></div></div>
+      <div class="setting-row">
+        <span>STEERING SENSITIVITY</span>
+        <input id="set-steer-sens" type="range" min="0.6" max="1.6" step="0.05" value="1.0" />
       </div>
-    </div>
-
-    <!-- Mobile Touch Controls -->
-    <div class="touch-left">
-      <button id="touch-left" class="touch-btn steer">◀</button>
-      <button id="touch-right" class="touch-btn steer">▶</button>
-    </div>
-    <div class="touch-right">
-      <div class="gear-paddles" id="gear-paddles">
-        <button id="touch-shift-dn" class="touch-btn tiny">G-</button>
-        <button id="touch-shift-up" class="touch-btn tiny">G+</button>
+      <div class="setting-row">
+        <span>ACCELERATOR PRESSURE</span>
+        <input id="set-accel-press" type="range" min="0.6" max="1.3" step="0.05" value="1.0" />
       </div>
-      <button id="touch-ers" class="touch-btn ers-btn">ERS / DRS</button>
-      <div class="pedals">
-        <button id="touch-brake" class="touch-btn brake">BRK</button>
-        <button id="touch-gas" class="touch-btn gas">GAS</button>
+      <div class="setting-row">
+        <span>BRAKE PRESSURE</span>
+        <input id="set-brake-press" type="range" min="0.6" max="1.3" step="0.05" value="1.0" />
       </div>
+      <div class="setting-hint">Keys: W/↑ Gas • S/↓ Brake • A/D or ←/→ Steer • Space ERS • F DRS • R Rear View • P Pit Stop • C Camera • T Leaderboard • Q/E Gears • Esc Pause</div>
     </div>
   </div>
 
   <!-- PAUSE OVERLAY -->
   <div id="screen-pause" class="screen modal">
     <div class="modal-card compact-modal">
-      <h2 style="text-align:center;margin-bottom:16px;">RACE PAUSED</h2>
+      <h2 style="text-align:center;margin-bottom:14px;">RACE PAUSED</h2>
       <div class="modal-stack">
-        <button id="btn-resume" class="nav-btn primary">RESUME RACE</button>
-        <button id="btn-restart" class="nav-btn">RESTART RACE</button>
-        <button id="btn-pause-cam" class="nav-btn">SWITCH CAMERA</button>
-        <button id="btn-quit" class="nav-btn">EXIT TO MENU</button>
+        <button id="btn-resume" class="mono-continue-btn full">RESUME RACE</button>
+        <button id="btn-restart" class="mono-dark-pill full">RESTART RACE</button>
+        <button id="btn-pause-cam" class="mono-dark-pill full">SWITCH CAMERA</button>
+        <button id="btn-quit" class="mono-dark-pill full">EXIT TO MENU</button>
       </div>
     </div>
   </div>
@@ -246,16 +390,16 @@
     <div class="modal-card results-card">
       <div class="results-header">
         <div>
-          <div class="nav-kicker" id="res-subtitle">GRAND PRIX CLASSIFICATION</div>
+          <div class="kicker" id="res-subtitle">GRAND PRIX CLASSIFICATION</div>
           <h2 id="res-title">P1 — VICTORY!</h2>
         </div>
-        <div class="pill gold" id="res-best-lap">BEST LAP: --:--.---</div>
+        <div class="mono-pill gold" id="res-best-lap">BEST LAP: --:--.---</div>
       </div>
       <div id="res-table" class="res-table"></div>
       <div class="results-actions">
-        <button id="btn-res-next" class="nav-btn primary">NEXT RACE</button>
-        <button id="btn-res-restart" class="nav-btn">RACE AGAIN</button>
-        <button id="btn-res-menu" class="nav-btn">MAIN MENU</button>
+        <button id="btn-res-next" class="mono-continue-btn">NEXT RACE</button>
+        <button id="btn-res-restart" class="mono-dark-pill">RACE AGAIN</button>
+        <button id="btn-res-menu" class="mono-dark-pill">MAIN MENU</button>
       </div>
     </div>
   </div>
