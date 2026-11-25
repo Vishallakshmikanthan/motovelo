@@ -1,15 +1,39 @@
 import * as THREE from 'three';
 import { CIRCUITS, CircuitDef } from '../data/circuits';
-import { EXTRA_AI_DRIVERS, F1_POINTS, FormulaTeam, TEAMS } from '../data/teams';
+import {
+  DRIVERS,
+  DriverEntry,
+  F1_POINTS,
+  FormulaTeam,
+  getDriversForTeam,
+  getTeamById,
+  HELMET_LIST,
+  SUIT_LIST,
+  TEAMS,
+  TYRE_COMPOUNDS,
+  TyreCompound,
+} from '../data/teams';
 import { AIController } from './AIController';
 import { AssetLoader } from './AssetLoader';
 import { AudioEngine } from './AudioEngine';
 import { CameraRig } from './CameraRig';
 import { GarageScene } from './GarageScene';
 import { buildCircuit, BuiltTrack } from './TrackBuilder';
-import { CarInput, FormulaCar } from './VehiclePhysics';
+import { CarInput, CarSetup, FormulaCar } from './VehiclePhysics';
 
-export type GameState = 'LOADING' | 'MENU' | 'GARAGE' | 'COUNTDOWN' | 'RACING' | 'PAUSED' | 'RESULTS';
+export type GameState =
+  | 'LOADING'
+  | 'MENU'
+  | 'CAR_SELECT'
+  | 'DRIVER_SELECT'
+  | 'TRACK_SELECT'
+  | 'CAR_SETUP'
+  | 'GRID_INTRO'
+  | 'COUNTDOWN'
+  | 'RACING'
+  | 'PAUSED'
+  | 'RESULTS';
+
 export type RaceMode = 'QUICK' | 'CHAMPIONSHIP' | 'TIMETRIAL';
 
 export interface GameSettings {
@@ -17,56 +41,76 @@ export interface GameSettings {
   quality: 'low' | 'high';
   audio: boolean;
   steerSensitivity: number;
+  accelPressure: number;
+  brakePressure: number;
 }
 
 export class GameEngine {
   private renderer: THREE.WebGLRenderer;
   private raceScene = new THREE.Scene();
-  private raceCamera = new THREE.PerspectiveCamera(65, 16 / 9, 0.15, 1400);
+  private raceCamera = new THREE.PerspectiveCamera(66, 16 / 9, 0.12, 1400);
   private assetLoader = new AssetLoader();
-  private garageScene!: GarageScene;
+  public garageScene!: GarageScene;
   private cameraRig = new CameraRig();
   public audio = new AudioEngine();
 
   public state: GameState = 'LOADING';
   public mode: RaceMode = 'QUICK';
-  public selectedTeamIndex = 0;
-  public selectedCircuitIndex = 0;
-  public selectedLaps = 3;
-  public difficulty = 1; // 0 Rookie, 1 Pro, 2 Legend
+  public selectedTeamIndex = 0;   // Default Redbull Racing
+  public selectedDriverIndex = 0; // Index within team drivers or DRIVERS
+  public customHelmetIdx = 0;
+  public customSuitIdx = 0;
+  public selectedCircuitIndex = 0; // Default Dune Coast (Netherlands)
+  public selectedLaps = 5;
+  public difficulty = 1;
   public championshipPoints = 0;
   public championshipRound = 0;
+  public fullTower = false;
+
+  public carSetup: CarSetup = {
+    wings: -20,
+    brakeBalance: -16,
+    suspension: 0,
+    compound: TYRE_COMPOUNDS[0],
+  };
 
   public settings: GameSettings = {
     autoGear: true,
     quality: 'high',
     audio: true,
     steerSensitivity: 1.0,
+    accelPressure: 1.0,
+    brakePressure: 1.0,
   };
 
   // Active race state
   private track: BuiltTrack | null = null;
   private cars: FormulaCar[] = [];
   private aiControllers = new Map<string, AIController>();
-  private playerCar: FormulaCar | null = null;
+  public playerCar: FormulaCar | null = null;
   private raceTime = 0;
+  private gridIntroTimer = 0;
   private countdownTimer = 0;
   private lastLitPod = 0;
   private bannerTimer = 0;
+  private pitStopTimer = 0;
+  private yellowFlagSector = 0;
+  private fastestLapTime = Infinity;
+  private fastestLapBannerTimer = 0;
   private accumulator = 0;
   private lastFrameTime = performance.now();
+  private hudTick = 0;
 
-  // Player live input
   public playerInput: CarInput = {
     throttle: 0,
     brake: 0,
     steer: 0,
     ers: false,
+    drs: false,
     shiftUp: false,
     shiftDown: false,
   };
 
-  // UI Hooks
   private minimapCtx: CanvasRenderingContext2D;
   private rpmLedEls: HTMLElement[] = [];
 
@@ -88,12 +132,12 @@ export class GameEngine {
     const minimap = document.getElementById('minimap-canvas') as HTMLCanvasElement;
     this.minimapCtx = minimap.getContext('2d')!;
 
-    // Build 15 RPM LEDs
+    // Build 11 RPM dots matching Monoposto cluster
     const ledsWrap = document.getElementById('rpm-leds')!;
     ledsWrap.innerHTML = '';
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 11; i++) {
       const el = document.createElement('div');
-      el.className = 'rpm-led';
+      el.className = 'rpm-dot';
       ledsWrap.appendChild(el);
       this.rpmLedEls.push(el);
     }
@@ -101,9 +145,26 @@ export class GameEngine {
     window.addEventListener('resize', () => this.onResize());
   }
 
+  get currentTeam(): FormulaTeam {
+    return TEAMS[this.selectedTeamIndex];
+  }
+
+  get currentDriver(): DriverEntry {
+    const teamDrivers = getDriversForTeam(this.currentTeam.id);
+    return teamDrivers[this.selectedDriverIndex % teamDrivers.length] || DRIVERS[0];
+  }
+
+  get currentHelmetId(): string {
+    return HELMET_LIST[this.customHelmetIdx % HELMET_LIST.length].id;
+  }
+
+  get currentSuitId(): string {
+    return SUIT_LIST[this.customSuitIdx % SUIT_LIST.length].id;
+  }
+
   private loadSavedState() {
     try {
-      const raw = localStorage.getItem('motovelo_save_v1');
+      const raw = localStorage.getItem('motovelo_save_v2');
       if (raw) {
         const d = JSON.parse(raw);
         if (typeof d.selectedTeamIndex === 'number') this.selectedTeamIndex = d.selectedTeamIndex % TEAMS.length;
@@ -111,7 +172,7 @@ export class GameEngine {
         if (d.settings) Object.assign(this.settings, d.settings);
       }
     } catch {
-      // Ignore storage errors
+      // ignore
     }
     this.audio.setEnabled(this.settings.audio);
   }
@@ -119,7 +180,7 @@ export class GameEngine {
   public saveState() {
     try {
       localStorage.setItem(
-        'motovelo_save_v1',
+        'motovelo_save_v2',
         JSON.stringify({
           selectedTeamIndex: this.selectedTeamIndex,
           championshipPoints: this.championshipPoints,
@@ -127,7 +188,7 @@ export class GameEngine {
         })
       );
     } catch {
-      // Ignore storage errors
+      // ignore
     }
   }
 
@@ -141,11 +202,55 @@ export class GameEngine {
     });
 
     this.garageScene = new GarageScene(this.assetLoader);
-    this.garageScene.setTeam(TEAMS[this.selectedTeamIndex]);
+    this.syncTeamDriverDefaults();
     this.onResize();
 
     this.setState('MENU');
     this.loop();
+  }
+
+  public syncTeamDriverDefaults() {
+    const drv = this.currentDriver;
+    const hIdx = HELMET_LIST.findIndex((h) => h.id === drv.helmetId);
+    const sIdx = SUIT_LIST.findIndex((s) => s.id === drv.suitId);
+    this.customHelmetIdx = hIdx >= 0 ? hIdx : 0;
+    this.customSuitIdx = sIdx >= 0 ? sIdx : 0;
+    this.refreshShowroomModels();
+  }
+
+  public refreshShowroomModels() {
+    if (!this.garageScene) return;
+    this.garageScene.setCar(this.currentTeam, this.currentHelmetId, this.currentSuitId, this.carSetup.compound);
+    this.garageScene.setDriver(this.currentSuitId, this.currentHelmetId);
+    this.updateMenuPills();
+  }
+
+  public selectTeam(index: number) {
+    this.selectedTeamIndex = ((index % TEAMS.length) + TEAMS.length) % TEAMS.length;
+    this.selectedDriverIndex = 0;
+    this.syncTeamDriverDefaults();
+    this.saveState();
+  }
+
+  public cycleDriver(delta: number) {
+    const list = getDriversForTeam(this.currentTeam.id);
+    this.selectedDriverIndex = ((this.selectedDriverIndex + delta) % list.length + list.length) % list.length;
+    this.syncTeamDriverDefaults();
+  }
+
+  public cycleHelmet() {
+    this.customHelmetIdx = (this.customHelmetIdx + 1) % HELMET_LIST.length;
+    this.refreshShowroomModels();
+  }
+
+  public cycleSuit() {
+    this.customSuitIdx = (this.customSuitIdx + 1) % SUIT_LIST.length;
+    this.refreshShowroomModels();
+  }
+
+  public selectCompound(compound: TyreCompound) {
+    this.carSetup.compound = compound;
+    this.refreshShowroomModels();
   }
 
   onResize() {
@@ -164,34 +269,58 @@ export class GameEngine {
     this.saveState();
   }
 
-  selectTeam(index: number) {
-    this.selectedTeamIndex = index;
-    if (this.garageScene) this.garageScene.setTeam(TEAMS[index]);
-    this.saveState();
-    this.updateMenuPills();
-  }
-
   updateMenuPills() {
     const teamPill = document.getElementById('menu-team-pill');
     const champPill = document.getElementById('menu-champ-pill');
-    if (teamPill) teamPill.textContent = TEAMS[this.selectedTeamIndex].name.toUpperCase();
+    if (teamPill) teamPill.textContent = this.currentTeam.name.toUpperCase();
     if (champPill) champPill.textContent = `CHAMP: ${this.championshipPoints} PTS`;
   }
 
   setState(next: GameState) {
     this.state = next;
-    const ids = ['screen-loading', 'screen-menu', 'screen-garage', 'screen-hud', 'screen-pause', 'screen-results'];
+    const ids = [
+      'screen-loading',
+      'screen-menu',
+      'screen-car-select',
+      'screen-driver-select',
+      'screen-track-select',
+      'screen-car-setup',
+      'screen-grid-intro',
+      'screen-hud',
+      'screen-pause',
+      'screen-results',
+    ];
     ids.forEach((id) => document.getElementById(id)?.classList.remove('active'));
 
     if (next === 'LOADING') document.getElementById('screen-loading')?.classList.add('active');
     if (next === 'MENU') {
       document.getElementById('screen-menu')?.classList.add('active');
+      this.garageScene?.setMode('MENU');
       this.audio.updateEngine(0, 0, 0, false);
       this.updateMenuPills();
     }
-    if (next === 'GARAGE') {
-      document.getElementById('screen-garage')?.classList.add('active');
+    if (next === 'CAR_SELECT') {
+      document.getElementById('screen-car-select')?.classList.add('active');
+      this.garageScene.zoomedIn = false;
+      this.garageScene.setMode('CAR_SELECT');
       this.audio.updateEngine(0, 0, 0, false);
+    }
+    if (next === 'DRIVER_SELECT') {
+      document.getElementById('screen-driver-select')?.classList.add('active');
+      this.garageScene.zoomedIn = false;
+      this.garageScene.setMode('DRIVER_SELECT');
+      this.audio.updateEngine(0, 0, 0, false);
+    }
+    if (next === 'TRACK_SELECT') {
+      document.getElementById('screen-track-select')?.classList.add('active');
+      this.audio.updateEngine(0, 0, 0, false);
+    }
+    if (next === 'CAR_SETUP') {
+      document.getElementById('screen-car-setup')?.classList.add('active');
+      this.audio.updateEngine(0, 0, 0, false);
+    }
+    if (next === 'GRID_INTRO') {
+      document.getElementById('screen-grid-intro')?.classList.add('active');
     }
     if (next === 'COUNTDOWN' || next === 'RACING') {
       document.getElementById('screen-hud')?.classList.add('active');
@@ -206,9 +335,30 @@ export class GameEngine {
       this.audio.updateEngine(0, 0, 0, false);
     }
 
-    // Show or hide manual gear paddles
     const paddles = document.getElementById('gear-paddles');
     if (paddles) paddles.style.display = this.settings.autoGear ? 'none' : 'flex';
+  }
+
+  public skipGridIntro() {
+    if (this.state === 'GRID_INTRO') {
+      this.beginCountdown();
+    }
+  }
+
+  private beginCountdown() {
+    this.countdownTimer = 0;
+    this.lastLitPod = 0;
+    this.updateStartLights(0);
+    document.getElementById('start-lights')?.classList.remove('hidden');
+
+    const circuit = CIRCUITS[this.selectedCircuitIndex];
+    document.getElementById('banner-track-name')!.textContent = circuit.name;
+    document.getElementById('banner-country')!.textContent = `(${circuit.country})`;
+    document.getElementById('banner-mode')!.textContent =
+      this.mode === 'TIMETRIAL' ? 'Time Trial' : this.mode === 'CHAMPIONSHIP' ? 'Championship' : 'Race';
+    document.getElementById('race-banner')?.classList.remove('hidden');
+
+    this.setState('COUNTDOWN');
   }
 
   startRace(mode: RaceMode) {
@@ -222,45 +372,55 @@ export class GameEngine {
     const circuitDef: CircuitDef = CIRCUITS[this.selectedCircuitIndex];
     this.setupRaceScene(circuitDef);
 
-    // Spawn Grid (1 car in Time Trial, 8 cars in Quick Race / Championship)
     this.cars = [];
     this.aiControllers.clear();
 
-    const playerTeam: FormulaTeam = TEAMS[this.selectedTeamIndex];
-    const gridEntries: { isPlayer: boolean; team: FormulaTeam; driver: string }[] = [];
+    const playerTeam = this.currentTeam;
+    const playerDrv = this.currentDriver;
+    const gridEntries: { isPlayer: boolean; team: FormulaTeam; driver: DriverEntry }[] = [];
 
     if (mode === 'TIMETRIAL') {
-      gridEntries.push({ isPlayer: true, team: playerTeam, driver: 'YOU' });
+      gridEntries.push({ isPlayer: true, team: playerTeam, driver: playerDrv });
     } else {
-      // Build 7 AI rivals + Player starting P4 for exciting overtakes
-      const rivals: { team: FormulaTeam; driver: string }[] = [];
-      TEAMS.forEach((t, idx) => {
-        if (idx !== this.selectedTeamIndex) rivals.push({ team: t, driver: t.driverName });
-      });
-      EXTRA_AI_DRIVERS.forEach((ex) => {
-        rivals.push({ team: TEAMS[ex.teamIdx], driver: ex.name });
-      });
-
-      for (let i = 0; i < 8; i++) {
-        if (i === 3) {
-          gridEntries.push({ isPlayer: true, team: playerTeam, driver: `YOU (${playerTeam.shortName})` });
+      // Full 22-car 2026 F1 grid! Player starts P8 for exciting overtakes through the pack!
+      const rivalDrivers = DRIVERS.filter((d) => d.id !== playerDrv.id);
+      const playerGridSlot = 7;
+      for (let i = 0; i < 22; i++) {
+        if (i === playerGridSlot) {
+          gridEntries.push({ isPlayer: true, team: playerTeam, driver: playerDrv });
         } else {
-          const r = rivals.shift()!;
-          gridEntries.push({ isPlayer: false, team: r.team, driver: r.driver });
+          const r = rivalDrivers.shift();
+          if (r) gridEntries.push({ isPlayer: false, team: getTeamById(r.teamId), driver: r });
         }
       }
     }
 
     const track = this.track!;
     gridEntries.forEach((entry, gridIdx) => {
-      const rig = this.assetLoader.createFormulaCar(entry.team);
-      this.raceScene.add(rig.root);
-      const car = new FormulaCar(`car_${gridIdx}`, entry.isPlayer, entry.team, entry.driver, rig);
+      const comp = entry.isPlayer ? this.carSetup.compound : TYRE_COMPOUNDS[gridIdx % 3];
+      const helmetId = entry.isPlayer ? this.currentHelmetId : entry.driver.helmetId;
+      const suitId = entry.isPlayer ? this.currentSuitId : entry.driver.suitId;
 
-      // Staggered 2-wide F1 starting grid behind start/finish line
-      const distBehind = 10 + gridIdx * 7.5;
+      const rig = this.assetLoader.createFormulaCar(entry.team, helmetId, suitId, comp, entry.isPlayer);
+      this.raceScene.add(rig.root);
+
+      const setup: CarSetup = entry.isPlayer
+        ? { ...this.carSetup }
+        : { wings: 0, brakeBalance: 0, suspension: 0, compound: comp };
+
+      const car = new FormulaCar(
+        `car_${gridIdx}`,
+        entry.isPlayer,
+        entry.team,
+        entry.driver.name,
+        entry.driver.code,
+        rig,
+        setup
+      );
+
+      const distBehind = 10 + gridIdx * 7.8;
       const smp = track.getSampleAtDistance(track.totalLength - distBehind);
-      const sideOffset = gridIdx % 2 === 0 ? -2.8 : 2.8;
+      const sideOffset = gridIdx % 2 === 0 ? -2.9 : 2.9;
       const startPos = smp.pos.clone().addScaledVector(smp.right, sideOffset);
       const startYaw = Math.atan2(smp.tangent.x, smp.tangent.z);
 
@@ -275,31 +435,49 @@ export class GameEngine {
     });
 
     this.raceTime = 0;
+    this.gridIntroTimer = 0;
     this.countdownTimer = 0;
     this.lastLitPod = 0;
     this.bannerTimer = 0;
+    this.fastestLapTime = Infinity;
+    this.fastestLapBannerTimer = 0;
     this.cameraRig.reset();
 
-    // Reset 5-red-light HUD & 3D Gantry
-    this.updateStartLights(0);
-    document.getElementById('start-lights')?.classList.remove('hidden');
-    document.getElementById('race-banner')?.classList.add('hidden');
-    const camBtn = document.getElementById('btn-hud-cam');
-    if (camBtn) camBtn.textContent = `CAM: ${this.cameraRig.mode}`;
+    // Populate Starting Grid Intro Card
+    (document.getElementById('grid-driver-portrait') as HTMLImageElement).src = playerDrv.portrait;
+    (document.getElementById('grid-team-logo') as HTMLImageElement).src = playerTeam.logoTex;
+    document.getElementById('grid-pos-num')!.textContent = mode === 'TIMETRIAL' ? '1' : '8';
+    document.getElementById('grid-driver-name')!.textContent = playerDrv.name;
+    document.getElementById('grid-team-name')!.textContent = playerTeam.name;
+    document.getElementById('grid-quali-time')!.textContent = '01:24.812';
+    this.pitStopTimer = 0;
+    this.yellowFlagSector = 0;
+    document.getElementById('touch-pit')?.classList.remove('armed');
 
-    this.setState('COUNTDOWN');
+    document.getElementById('fastest-lap-banner')?.classList.add('hidden');
+    document.getElementById('hud-session')!.textContent =
+      mode === 'TIMETRIAL' ? 'HOTLAP' : 'RACE';
+
+    // Reset sector boxes
+    ['sec-s1', 'sec-s2', 'sec-s3'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.className = 'sec-cell';
+        el.textContent = `S${i + 1}`;
+      }
+    });
+
+    this.setState('GRID_INTRO');
   }
 
   private setupRaceScene(def: CircuitDef) {
-    // Clear previous scene objects
     while (this.raceScene.children.length > 0) {
       this.raceScene.remove(this.raceScene.children[0]);
     }
 
     this.raceScene.background = new THREE.Color(def.skyHorizon);
-    this.raceScene.fog = new THREE.FogExp2(def.fogColor, 0.0014);
+    this.raceScene.fog = new THREE.FogExp2(def.fogColor, 0.0013);
 
-    // Sky dome gradient
     const skyGeo = new THREE.SphereGeometry(950, 24, 16);
     const skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
@@ -327,8 +505,7 @@ export class GameEngine {
     });
     this.raceScene.add(new THREE.Mesh(skyGeo, skyMat));
 
-    // Lighting
-    const hemi = new THREE.HemisphereLight(def.skyHorizon, def.groundColor, 1.05);
+    const hemi = new THREE.HemisphereLight(def.skyHorizon, def.groundColor, 1.1);
     this.raceScene.add(hemi);
 
     const sun = new THREE.DirectionalLight(def.sunColor, def.sunIntensity);
@@ -350,7 +527,7 @@ export class GameEngine {
   }
 
   private updateStartLights(litCount: number) {
-    const pods = document.querySelectorAll('#start-lights .light-pod');
+    const pods = document.querySelectorAll('#start-lights .mono-pod');
     pods.forEach((pod, idx) => {
       if (idx < litCount) pod.classList.add('lit');
       else pod.classList.remove('lit');
@@ -373,10 +550,49 @@ export class GameEngine {
   }
 
   cycleCamera() {
-    const mode = this.cameraRig.cycle();
-    const camBtn = document.getElementById('btn-hud-cam');
-    if (camBtn) camBtn.textContent = `CAM: ${mode}`;
+    this.cameraRig.cycle();
     this.audio.playClick();
+  }
+
+  setLookBack(active: boolean) {
+    this.cameraRig.lookBack = active;
+  }
+
+  togglePitRequest() {
+    if (!this.playerCar || this.state !== 'RACING') return;
+    this.playerCar.pitRequested = !this.playerCar.pitRequested;
+    document.getElementById('touch-pit')?.classList.toggle('armed', this.playerCar.pitRequested);
+    this.audio.playClick();
+  }
+
+  toggleTower() {
+    this.fullTower = !this.fullTower;
+    this.audio.playClick();
+  }
+
+  private updateSlipstreamAndFlags() {
+    this.yellowFlagSector = 0;
+    for (const car of this.cars) {
+      car.slipstream = 0;
+      if (this.raceTime > 6 && !car.isPlayer && car.speed < 14) {
+        this.yellowFlagSector = car.projection.t < 0.33 ? 1 : car.projection.t < 0.66 ? 2 : 3;
+      }
+      const fwdX = Math.sin(car.yaw);
+      const fwdZ = Math.cos(car.yaw);
+      for (const other of this.cars) {
+        if (other.id === car.id) continue;
+        const dx = other.position.x - car.position.x;
+        const dz = other.position.z - car.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 4.0 && dist < 36.0) {
+          const dot = (dx * fwdX + dz * fwdZ) / dist;
+          if (dot > 0.94) {
+            const tow = 1.0 - (dist - 4.0) / 32.0;
+            if (tow > car.slipstream) car.slipstream = tow;
+          }
+        }
+      }
+    }
   }
 
   private resolveCarCollisions() {
@@ -406,6 +622,18 @@ export class GameEngine {
     }
   }
 
+  private triggerFastestLapBanner(car: FormulaCar, prevBest: number) {
+    const fl = document.getElementById('fastest-lap-banner');
+    if (!fl) return;
+    document.getElementById('fl-driver')!.textContent = car.driverName;
+    document.getElementById('fl-time')!.textContent = formatTime(car.lastLapTime);
+    const delta = Number.isFinite(prevBest) ? `-${(prevBest - car.lastLapTime).toFixed(3)}` : '';
+    document.getElementById('fl-delta')!.textContent = delta;
+    (document.getElementById('fl-logo') as HTMLImageElement).src = car.team.logoTex;
+    fl.classList.remove('hidden');
+    this.fastestLapBannerTimer = 4.5;
+  }
+
   private stepPhysics(dt: number) {
     if (!this.track || !this.playerCar) return;
 
@@ -419,15 +647,9 @@ export class GameEngine {
           this.audio.playStartBeep(false);
         }
       } else if (this.countdownTimer >= 4.25) {
-        // LIGHTS OUT AND AWAY WE GO!
         this.updateStartLights(0);
         document.getElementById('start-lights')?.classList.add('hidden');
-        const banner = document.getElementById('race-banner');
-        if (banner) {
-          banner.textContent = 'LIGHTS OUT!';
-          banner.classList.remove('hidden');
-        }
-        this.bannerTimer = 1.6;
+        document.getElementById('race-banner')?.classList.add('hidden');
         this.audio.playStartBeep(true);
         this.state = 'RACING';
       }
@@ -439,17 +661,49 @@ export class GameEngine {
           document.getElementById('race-banner')?.classList.add('hidden');
         }
       }
+      if (this.fastestLapBannerTimer > 0) {
+        this.fastestLapBannerTimer -= dt;
+        if (this.fastestLapBannerTimer <= 0) {
+          document.getElementById('fastest-lap-banner')?.classList.add('hidden');
+        }
+      }
     }
 
     const canMove = this.state === 'RACING';
 
+    if (canMove) {
+      this.updateSlipstreamAndFlags();
+      // Handle Player Pit Stop when armed and passing main straight pit window
+      if (this.playerCar.pitRequested && !this.playerCar.inPit && (this.playerCar.projection.t > 0.94 || this.playerCar.projection.t < 0.04)) {
+        this.playerCar.inPit = true;
+        this.playerCar.pitRequested = false;
+        this.pitStopTimer = 2.2;
+        document.getElementById('touch-pit')?.classList.remove('armed');
+      }
+      if (this.playerCar.inPit) {
+        this.pitStopTimer -= dt;
+        this.playerCar.speed *= Math.exp(-5 * dt);
+        if (this.pitStopTimer <= 0) {
+          this.playerCar.inPit = false;
+          this.playerCar.pitStops++;
+          this.playerCar.tyreHealth = 100;
+          this.playerCar.carHealth = 100;
+          this.playerCar.tyreTemp = 88;
+          // Swap to next dry compound for authentic strategy
+          const nextIdx = (TYRE_COMPOUNDS.findIndex((c) => c.id === this.playerCar!.setup.compound.id) + 1) % 3;
+          this.playerCar.setup.compound = TYRE_COMPOUNDS[nextIdx];
+          this.audio.playStartBeep(true);
+        }
+      }
+    }
+
     for (const car of this.cars) {
       let input: CarInput;
       if (car.isPlayer) {
-        input = this.playerInput;
+        input = car.inPit ? { throttle: 0, brake: 1, steer: 0, ers: false, drs: false } : this.playerInput;
       } else {
         const ai = this.aiControllers.get(car.id)!;
-        input = canMove ? ai.computeInput(car, this.cars, this.track, dt) : { throttle: 0.4, brake: 0, steer: 0, ers: false };
+        input = canMove ? ai.computeInput(car, this.cars, this.track, dt) : { throttle: 0.4, brake: 0, steer: 0, ers: false, drs: false };
       }
 
       const res = car.step(
@@ -458,26 +712,25 @@ export class GameEngine {
         this.track,
         car.isPlayer ? this.settings.autoGear : true,
         this.settings.steerSensitivity,
+        car.isPlayer ? this.settings.accelPressure : 1.0,
+        car.isPlayer ? this.settings.brakePressure : 1.0,
         this.raceTime,
         this.selectedLaps,
         canMove
       );
 
+      if (res.crossedLap && car.lastLapTime < this.fastestLapTime) {
+        const prev = this.fastestLapTime;
+        this.fastestLapTime = car.lastLapTime;
+        this.triggerFastestLapBanner(car, prev);
+      }
+
       if (car.isPlayer) {
         if (res.shifted) this.audio.playShiftPop();
         if (car.collisionImpulse > 0.1) this.audio.playCollision(car.collisionImpulse);
-        if (res.crossedLap && !car.finished) {
-          const banner = document.getElementById('race-banner');
-          if (banner) {
-            banner.textContent = car.lap === this.selectedLaps ? 'FINAL LAP!' : `LAP ${car.lap}/${this.selectedLaps}`;
-            banner.classList.remove('hidden');
-            this.bannerTimer = 1.8;
-          }
-        }
       }
     }
 
-    // Consume one-shot manual shift triggers
     this.playerInput.shiftUp = false;
     this.playerInput.shiftDown = false;
 
@@ -485,7 +738,6 @@ export class GameEngine {
       this.resolveCarCollisions();
     }
 
-    // Check race completion for player
     if (this.playerCar.finished && this.state === 'RACING') {
       this.showResults();
     }
@@ -511,24 +763,26 @@ export class GameEngine {
       this.saveState();
     }
 
-    const title = document.getElementById('res-title')!;
-    const sub = document.getElementById('res-subtitle')!;
-    const bestEl = document.getElementById('res-best-lap')!;
+    document.getElementById('res-title')!.textContent =
+      playerPos === 1 ? 'P1 — GRAND PRIX VICTORY!' : `P${playerPos} — FINISHED`;
+    document.getElementById('res-subtitle')!.textContent =
+      `${CIRCUITS[this.selectedCircuitIndex].name} // ${this.mode}`;
+    document.getElementById('res-best-lap')!.textContent =
+      `BEST LAP: ${formatTime(this.playerCar!.bestLapTime)}`;
+    document.getElementById('btn-res-next')!.style.display =
+      this.mode === 'CHAMPIONSHIP' ? 'inline-flex' : 'none';
+
     const table = document.getElementById('res-table')!;
-    const nextBtn = document.getElementById('btn-res-next')!;
-
-    title.textContent = playerPos === 1 ? 'P1 — GRAND PRIX VICTORY!' : `P${playerPos} — FINISHED`;
-    sub.textContent = `${CIRCUITS[this.selectedCircuitIndex].name} // ${this.mode}`;
-    bestEl.textContent = `BEST LAP: ${formatTime(this.playerCar!.bestLapTime)}`;
-    nextBtn.style.display = this.mode === 'CHAMPIONSHIP' ? 'flex' : 'none';
-
     table.innerHTML = '';
     standings.forEach((car, idx) => {
       const row = document.createElement('div');
       row.className = `res-row ${car.isPlayer ? 'player' : ''}`;
-      const gap = idx === 0 ? formatTime(car.finishTime || this.raceTime) : `+${((idx * 1.4) + Math.abs(standings[0].totalProgress - car.totalProgress) * 18).toFixed(2)}s`;
+      const gap =
+        idx === 0
+          ? formatTime(car.finishTime || this.raceTime)
+          : `+${(idx * 1.15 + Math.abs(standings[0].totalProgress - car.totalProgress) * 18).toFixed(3)}s`;
       const rowPts = this.mode === 'TIMETRIAL' ? '—' : `+${F1_POINTS[idx] ?? 0} PTS`;
-      row.innerHTML = `<span>P${idx + 1}</span><span>${car.driverName} <small style="color:#98a2b3">(${car.team.shortName})</small></span><span>${gap}</span><span style="text-align:right;color:#f5b700">${rowPts}</span>`;
+      row.innerHTML = `<span>P${idx + 1}</span><img src="${car.team.logoTex}" class="tower-logo" /><span>${car.driverName}</span><span style="font-family:monospace">${gap}</span><span style="text-align:right;color:#f5b700">${rowPts}</span>`;
       table.appendChild(row);
     });
 
@@ -540,40 +794,107 @@ export class GameEngine {
     const car = this.playerCar;
 
     const kmh = Math.round(car.speed * 3.6);
-    document.getElementById('hud-speed')!.textContent = String(kmh);
-    document.getElementById('hud-gear')!.textContent = this.state === 'COUNTDOWN' ? '1' : String(car.gear);
+    const mph = Math.round(kmh * 0.621371);
+    document.getElementById('hud-kph')!.textContent = String(kmh);
+    document.getElementById('hud-mph')!.textContent = String(mph);
+    document.getElementById('hud-gear')!.textContent =
+      this.state === 'COUNTDOWN' || car.speed < 0.4 ? 'N' : String(car.gear);
 
     const standings = this.getSortedStandings();
-    const pos = standings.findIndex((c) => c.isPlayer) + 1;
-    document.getElementById('hud-pos')!.innerHTML = `${pos}<small>/${this.cars.length}</small>`;
-    document.getElementById('hud-lap')!.innerHTML = `${car.lap}<small>/${this.selectedLaps}</small>`;
+    const playerIdx = standings.findIndex((c) => c.isPlayer);
+    const pos = playerIdx + 1;
+
+    document.getElementById('hud-lap')!.textContent = `LAP ${car.lap}/${this.selectedLaps}`;
     document.getElementById('hud-time')!.textContent = formatTime(this.raceTime - car.lapStartTime);
     document.getElementById('hud-best')!.textContent = formatTime(car.bestLapTime);
+    document.getElementById('hud-fastest')!.textContent = formatTime(this.fastestLapTime);
 
-    const ersEl = document.getElementById('hud-ers')!;
-    ersEl.style.width = `${Math.round(car.ersCharge * 100)}%`;
+    const deltaVal =
+      Number.isFinite(car.bestLapTime) && this.raceTime - car.lapStartTime > 2
+        ? `${(this.raceTime - car.lapStartTime - car.bestLapTime * Math.max(0.05, car.projection.t)).toFixed(3)}`
+        : '--.---';
+    document.getElementById('hud-delta')!.textContent = deltaVal;
 
-    // RPM LEDs
+    // Sector cells
+    car.sectorTimes.forEach((st, idx) => {
+      const el = document.getElementById(`sec-s${idx + 1}`);
+      if (el && st !== null) {
+        el.className = 'sec-cell green';
+        el.textContent = formatTime(st);
+      }
+    });
+
+    // Tyre temp, ring color, fuel & ERS bars
+    document.getElementById('hud-tyre-temp')!.textContent = `${Math.round(car.tyreTemp)}°`;
+    const ring = document.getElementById('hud-tyre-ring') as HTMLElement;
+    ring.style.borderColor = car.tyreTemp > 96 ? '#ff4433' : car.tyreTemp > 84 ? '#22ee55' : '#22d8ff';
+    (document.getElementById('hud-ers-bar') as HTMLElement).style.width = `${Math.round(car.ersCharge * 100)}%`;
+    (document.getElementById('hud-fuel-bar') as HTMLElement).style.width = `${Math.round(car.fuelLevel)}%`;
+    (document.getElementById('hud-tyre-bar') as HTMLElement).style.width = `${Math.round(car.tyreHealth)}%`;
+
+    // 11 RPM LEDs
     const rpmFrac = Math.max(0, Math.min(1, (car.rpm - 5000) / 8200));
-    const litLeds = Math.round(rpmFrac * 15);
-    for (let i = 0; i < 15; i++) {
+    const litLeds = Math.round(rpmFrac * 11);
+    for (let i = 0; i < 11; i++) {
       const el = this.rpmLedEls[i];
       if (i < litLeds) {
-        el.className = i < 5 ? 'rpm-led g' : i < 10 ? 'rpm-led r' : 'rpm-led b';
+        el.className = i < 4 ? 'rpm-dot g' : i < 8 ? 'rpm-dot r' : 'rpm-dot b';
       } else {
-        el.className = 'rpm-led';
+        el.className = 'rpm-dot';
       }
     }
 
-    // Minimap
+    // Update Leaderboard Tower, Yellow Flag Header, DRS glow & Cockpit Display at ~10Hz
+    this.hudTick++;
+    if (this.hudTick % 6 === 0) {
+      const hdr = document.getElementById('tower-header');
+      if (hdr) {
+        if (this.yellowFlagSector > 0) {
+          hdr.textContent = `YELLOW FLAG S${this.yellowFlagSector}`;
+          hdr.classList.add('yellow-flag');
+        } else {
+          hdr.textContent = 'MOTOVELO';
+          hdr.classList.remove('yellow-flag');
+        }
+      }
+      document.getElementById('touch-drs')?.classList.toggle('active', car.drsActive);
+
+      const rowsEl = document.getElementById('tower-rows')!;
+      let slice: { car: FormulaCar; rank: number }[] = [];
+      if (this.fullTower || standings.length <= 4) {
+        slice = standings.map((c, idx) => ({ car: c, rank: idx + 1 }));
+      } else {
+        const start = Math.max(0, Math.min(standings.length - 3, playerIdx - 1));
+        for (let i = start; i < Math.min(standings.length, start + 3); i++) {
+          slice.push({ car: standings[i], rank: i + 1 });
+        }
+      }
+      const leaderProg = standings[0]?.totalProgress ?? 0;
+      rowsEl.innerHTML = slice
+        .map(({ car: c, rank }) => {
+          const gapSec = Math.max(0, (leaderProg - c.totalProgress) * 58);
+          const gapText = c.inPit ? `PIT (${c.pitStops + 1}) P` : rank === 1 ? `LAP ${c.lap}` : `+${gapSec.toFixed(3)}`;
+          return `<div class="tower-row ${c.isPlayer ? 'player' : ''}">
+            <span class="tyre-dot" style="border-color:${c.setup.compound.color}">${c.pitStops}</span>
+            <span>${String(rank).padStart(2, '0')}</span>
+            <span>${c.driverCode}</span>
+            <img src="${c.team.logoTex}" class="tower-logo" />
+            <span class="tower-gap">${gapText}</span>
+          </div>`;
+        })
+        .join('');
+
+      car.updateCockpitDisplay(pos, this.selectedLaps, deltaVal);
+    }
+
     this.drawMinimap();
   }
 
   private drawMinimap() {
     if (!this.track) return;
     const ctx = this.minimapCtx;
-    const w = 136;
-    const h = 136;
+    const w = 124;
+    const h = 124;
     ctx.clearRect(0, 0, w, h);
 
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -583,17 +904,16 @@ export class GameEngine {
       if (s.pos.z < minZ) minZ = s.pos.z;
       if (s.pos.z > maxZ) maxZ = s.pos.z;
     }
-    const pad = 14;
+    const pad = 16;
     const scale = Math.min((w - pad * 2) / Math.max(1, maxX - minX), (h - pad * 2) / Math.max(1, maxZ - minZ));
     const ox = (w - (maxX - minX) * scale) * 0.5;
     const oz = (h - (maxZ - minZ) * scale) * 0.5;
-
     const toX = (x: number) => ox + (x - minX) * scale;
     const toY = (z: number) => oz + (z - minZ) * scale;
 
-    // Track outline
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 4;
+    // Dark border + light grey road outline
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 6;
     ctx.beginPath();
     this.track.samples.forEach((s, i) => {
       if (i === 0) ctx.moveTo(toX(s.pos.x), toY(s.pos.z));
@@ -602,12 +922,37 @@ export class GameEngine {
     ctx.closePath();
     ctx.stroke();
 
-    // Cars
+    ctx.strokeStyle = '#aeb6c4';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    // Car dots
     for (const car of this.cars) {
-      ctx.fillStyle = car.isPlayer ? '#ff1e2d' : '#f5b700';
+      if (car.isPlayer) continue;
+      ctx.fillStyle = '#' + car.team.primary.toString(16).padStart(6, '0');
       ctx.beginPath();
-      ctx.arc(toX(car.position.x), toY(car.position.z), car.isPlayer ? 4.5 : 3.0, 0, Math.PI * 2);
+      ctx.arc(toX(car.position.x), toY(car.position.z), 3, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Green player arrow
+    if (this.playerCar) {
+      const px = toX(this.playerCar.position.x);
+      const py = toY(this.playerCar.position.z);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(-this.playerCar.yaw + Math.PI);
+      ctx.fillStyle = '#22ff44';
+      ctx.strokeStyle = '#062008';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(5, 5);
+      ctx.lineTo(-5, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
@@ -617,9 +962,37 @@ export class GameEngine {
     const frameDt = Math.min(0.05, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
 
-    if (this.state === 'MENU' || this.state === 'GARAGE') {
-      this.garageScene.update(frameDt, this.state === 'GARAGE');
+    if (
+      this.state === 'MENU' ||
+      this.state === 'CAR_SELECT' ||
+      this.state === 'DRIVER_SELECT' ||
+      this.state === 'TRACK_SELECT' ||
+      this.state === 'CAR_SETUP'
+    ) {
+      this.garageScene.update(frameDt);
       this.renderer.render(this.garageScene.scene, this.garageScene.camera);
+      return;
+    }
+
+    if (this.state === 'GRID_INTRO') {
+      this.gridIntroTimer += frameDt;
+      if (this.playerCar) {
+        // Dramatic grid fly-over camera looking down the starting grid!
+        const p = this.playerCar.position;
+        const fwd = new THREE.Vector3(Math.sin(this.playerCar.yaw), 0, Math.cos(this.playerCar.yaw));
+        const right = new THREE.Vector3(Math.cos(this.playerCar.yaw), 0, -Math.sin(this.playerCar.yaw));
+        const camPos = p
+          .clone()
+          .addScaledVector(fwd, 9 - this.gridIntroTimer * 2.2)
+          .addScaledVector(right, 4.2);
+        camPos.y += 2.3;
+        this.raceCamera.position.copy(camPos);
+        this.raceCamera.lookAt(p.x, p.y + 0.8, p.z - 8);
+      }
+      this.renderer.render(this.raceScene, this.raceCamera);
+      if (this.gridIntroTimer >= 2.8) {
+        this.beginCountdown();
+      }
       return;
     }
 
