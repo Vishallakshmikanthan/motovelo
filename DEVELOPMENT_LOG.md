@@ -1,44 +1,44 @@
 # MOTOVELO — Development Log
 
-## Session 1 — 2026-11-24
+## Session 1 — 2026-11-24: Reference Analysis & Initial WebGL2 Prototype
+- Inspected `Monoposto.apk` via REA MCP (`com.gabama.monopostolite`, Unity IL2CPP/Burst) to establish feature parity targets while keeping 100% original code, Blender 5.2 3D models, UI, and procedural audio.
+- Built initial Three.js + TypeScript prototype (`motovelo-web`) and Android `WebViewAssetLoader` wrapper (`motovelo-android`).
 
-### 1. Environment & Reference APK Inspection
-- **REA MCP Analysis of `Monoposto.apk`**:
-  - Opened `Monoposto.apk` via REA `open_binary` (SHA-256: `9521c76c2fbbd3d0c83c467f432882ed1273b59f4c7c7d916384dadd32749bca`, 436 MB).
-  - Ran REA `inspect_artifact` + `inspect_analysis_view` across all 156 archive occurrences.
-  - Confirmed package `com.gabama.monopostolite` v6.74 (Unity IL2CPP/Burst, `arm64-v8a` + `armeabi-v7a`, Unity serialized bundles `data.unity3d`, `datapack.unity3d`, `sharedassets*.resource`).
-  - **IP / Asset Decision**: All assets in `Monoposto.apk` are proprietary third-party commercial Unity assets. No assets or code will be copied from `Monoposto.apk`; MOTOVELO will be built with 100% original code, Blender-modeled 3D assets, textures, UI, and procedural audio.
-- **Available Toolchain**:
-  - JDK 21 (`Eclipse Adoptium`), Android SDK (`android-34/35/36.1`, `build-tools 34–37`, `adb`, `emulator` with AVD `Pixel_7`), cached Gradle 8.x/9.x, Node.js/npm, Python 3.14, **Blender 5.2**.
-- **Architecture Decision**:
-  - **Engine**: Three.js (WebGL2 PBR 3D Engine) + Custom 60Hz Fixed-Timestep Formula Vehicle Physics + Spline AI Engine + Web Audio API V6 Turbo Hybrid Synthesizer.
-  - **3D Pipeline**: Blender 5.2 generating optimized `.glb` assets (Formula car chassis, Halo, front/rear wings, wheels, grandstands, pit building, start/finish gantry, track props).
-  - **Android Packaging**: Native Android Gradle project (`com.motovelo.racing`) using `androidx.webkit.WebViewAssetLoader` serving bundled local assets with full hardware-accelerated WebGL2, immersive fullscreen landscape mode, multi-touch input, and direct build to `MOTOVELO.apk`.
+---
 
-### 2. 3D Asset Production (Blender 5.2)
-- Created `motovelo-assets/generate_assets.py` and executed headless Blender 5.2.3 LTS.
-- Exported 5 original PBR `.glb` assets to `motovelo-assets/models/` and `motovelo-web/public/models/`:
-  - `formula_car.glb` (sculpted monocoque, sidepods, Halo, driver helmet/visor, multi-element front & rear wings with DRS flap, diffuser, rain light, double-wishbone suspension, T-Cam)
-  - `formula_wheel.glb` (wide slick tire, colored compound sidewall ring, 5-spoke alloy rim, center lock nut)
-  - `grandstand.glb` (8-tier stadium grandstand with steel columns and cantilevered roof)
-  - `pit_building.glb` (6-bay paddock & VIP glass complex)
-  - `start_gantry.glb` (overhead truss with 5 individually controllable F1 start light pods)
+## Session 2 — 2026-11-25: Native Unity 6.3 LTS (`6000.3.29f1`) + URP Migration & Dual WebGL/APK Setup
+- **2026 F1 Replica 3D Pipeline**:
+  - Created `motovelo-assets/build_2026_f1_replica.py` in Blender 5.2 to sculpt a multi-part 2026 Formula 1 car (`formula_car.fbx`), Pirelli wheel (`formula_wheel.fbx`), and standing driver (`driver_standing.fbx`) UV-mapped directly to `2026 LIVERY-TEMPLATE.PNG`.
+  - Imported all 11 2026 constructors, 22 drivers, helmets, race suits, 5 Pirelli compounds (Soft, Medium, Hard, Inter, Wet), and 20 real-world GPS circuit GeoJSON splines into `MotoveloUnity/`.
+- **Android Blank-Screen Root-Cause Fix (`v2.1.0`)**:
+  - Switched Android entry point from `UnityPlayerGameActivity` to `AndroidApplicationEntry.Activity` (`com.unity3d.player.UnityPlayerActivity`), forced universal `OpenGLES3`, disabled `m_UseNativeRenderPass` on mobile URP renderer, unified quality levels onto `PC_RPAsset.asset`, set `stripEngineCode = false`, added `Assets/link.xml`, and embedded `MotoveloFont.ttf`.
+- **Simultaneous WebGL + Android Build Pipeline**:
+  - Added `MotoveloBuilder.BuildWebGL()` (`Gzip` + `decompressionFallback = true`) alongside `BuildAndroidApk()` so every gameplay update outputs both `MOTOVELO-WebGL/` and signed `MOTOVELO.apk`.
 
-### 3. Game Implementation (`motovelo-web`)
-- Implemented complete TypeScript + Three.js WebGL2 racing engine:
-  - `AssetLoader.ts`: Loads all 5 Blender `.glb` assets, dynamic team livery tinting, articulated wheel rigs & DRS flap.
-  - `TrackBuilder.ts`: Procedural 3D circuits (asphalt, kerbs, runoff, MOTOVELO barriers, checkered start line, pit complex, grandstands, trees, water) + spatial spline projection & curvature lookup for 3 circuits (`Autodromo Veloce`, `Port Azzurro`, `Fujiyama Technical`).
-  - `VehiclePhysics.ts`: 60Hz fixed-timestep Formula physics (8-speed sequential gearbox, RPM curve, $v^2$ aero downforce & drag, ERS/DRS boost, lateral grip & slip, barrier & car-to-car collisions, pitch/roll suspension).
-  - `AIController.ts`: 7 autonomous AI competitors with look-ahead braking zones, racing line following, overtaking, and collision avoidance.
-  - `CameraRig.ts`: 5 cameras (`CHASE`, `TCAM`, `COCKPIT`, `NOSE`, `TRACKSIDE`) with dynamic FOV.
-  - `AudioEngine.ts`: Procedural Web Audio V6 Turbo Hybrid engine synth, turbo whine, shift pop, tire screech, collision thud, start-light beeps, UI clicks.
-  - `GarageScene.ts`: Dedicated 3D showroom turntable for 6 original teams (`Scuderia Veloce`, `Apex Corsa Racing`, `Silberpfeil GP`, `Solaris Papaya`, `British Emerald F1`, `Cobalt Aero Team`).
-  - `GameEngine.ts` & `main.ts`: Full state machine (Loading, Menu, Garage, Countdown, Racing, Pause, Results, Settings, Credits), Quick Race, 3-Round Championship, Time Trial, broadcast HUD, minimap, responsive landscape multi-touch controls & keyboard controls.
-- Verified TypeScript (`npx tsc --noEmit`) and production Vite build (`npm run build`) with 0 errors.
+---
 
-### 4. Android Build & Verification (`MOTOVELO.apk`)
-- Built native Android Gradle project (`motovelo-android`, `com.motovelo.racing`, `compileSdk 35`, `minSdk 24`, `targetSdk 35`) using hardware-accelerated `WebViewAssetLoader`, immersive sticky fullscreen, and forced landscape orientation.
-- Resolved transitive Kotlin stdlib duplicate class issue via `org.jetbrains.kotlin:kotlin-bom:1.8.22`.
-- Compiled and signed `c:\Users\Lenovo\Downloads\motovelo\MOTOVELO.apk` (3.48 MB).
-- Verified APK manifest via `aapt2 dump badging`, verified v2 signature via `apksigner verify`, and confirmed all 5 Blender `.glb` assets and production web bundle are packaged inside `assets/www/`.
-- **Runtime Test Note**: Automated Chrome DevTools browser playtesting could not connect because Chrome remote debugging (`DevToolsActivePort`) was not enabled on this host, and no physical/running ADB device was attached (`adb devices` empty). Compilation, TypeScript checking, Blender asset export, APK packaging, and APK signature verification all succeeded.
+## Session 3 — 2026-11-25: F1 Stadium Circuit, Powertrain, Pack AI, Graphics & Audio Overhaul
+- **Enclosed 3D Stadium Circuits (`SplineCircuit.cs`)**:
+  - Added circuit-specific 3D elevation (`15m–44m` climbs and plunges, e.g., `32.3m` Raidillon-style crest on `heritage-circuit`) and smoothed progressive corner banking (`9.5°–16.5°`).
+  - Built continuous `3.8m` double-sided FIA wire-mesh debris catch-fencing, a 360° mountain/stadium horizon ring, upgraded multi-tier grandstands (`grandstand.fbx`), 3-story VIP paddock buildings (`pit_building.fbx`), floodlight towers (`light_tower.fbx`), and strict 960-sample `IsClearOfAllTrackSegments` guards preventing any prop from intruding onto the asphalt.
+- **Powertrain, DRS Flap Animation & Marked Zones (`FormulaCarPhysics.cs`, `FormulaCarVisuals.cs`)**:
+  - Removed straight-line auto-braking speed cuts, smoothed throttle application (`pow(1.35)` + `8.5/s` slew), tuned seamless 8-speed automatic shifting (`309.3 KPH` verified in 8th gear), and animated the rear-wing DRS flap (`-42°` pitch + glowing green wingtip LEDs) across green-painted DRS zones and cyan ERS harvest braking zones.
+- **Competitive 300+ KPH AI Pack (`FormulaAICar.cs`)**:
+  - Eliminated Lap-1 launch hesitation and raised AI straight-line pace to `300.3 KPH` with dt-scaled wheel-rub collision resolution (`MotoveloGameManager.cs`).
+- **Warm PolyBLEP V6 Hybrid Synth (`ProceduralV6Audio.cs`)**:
+  - Replaced harsh raw sine oscillators with a band-limited PolyBLEP sawtooth + sub-harmonic rumble + 3-pole cascaded `18 dB/oct` low-pass filter (`~920 Hz`–`3.4 kHz`) and added an instant `SFX ON / MUTED` HUD button.
+
+---
+
+## Session 4 — 2026-11-25: Physical 3D FIA Pit Lane, 10-Man Pit Crew & Sporting Regulations
+- **Physical Starting-Region & Lap-End Pit Lane (`SplineCircuit.cs`)**:
+  - Upgraded `GetSampleAtDistance` to binary-search cumulative arc-length `samples[mid].s` for exact meter-accurate pit placement.
+  - Built a paved parallel 3D Pit Lane (`-230m..+265m`) with **two physical Pit Entry Mouths** — right in the **Starting Region** (`+14m..+82m` past the Start Gantry) and at **Lap End** (`-225m..-120m`) — separated from the track by Concrete FIA Pit Walls, glowing amber `PIT IN` chevrons, `PIT` & `80` KPH speed-limit signs/lines, `PIT EXIT` green marshal light (`+198m`), and a Solid White Pit Exit Line (`+198m..+260m`).
+- **10-Man Team-Suited Pit Crew & Pneumatic Boom (`PitStopCrewController.cs`)**:
+  - Sculpted `pit_crew_member.fbx` and `pit_boom.fbx` in Blender 5.2 (`upgrade_trackside_assets.py`).
+  - Spawned 10 team-liveried mechanics (Front/Rear Jackmen lifting the chassis `+0.150m`, 4 Wheel Gunners firing blue impact sparks, 4 Tyre Carriers holding compound-matched Pirelli spare wheels) + overhead Stop/Go pneumatic boom executing a `2.50s` live tyre change with real-time sidewall swapping and Broadcast Pit-Box Camera framing.
+- **FIA Sporting Regulations & Strategy Radio (`FormulaCarPhysics.cs`, `MotoveloUIManager.cs`)**:
+  - Implemented `80 KPH` Pit Speed Limiter, `+3.0s` FIA Stewards speeding penalty, Mandatory 2-Compound Dry Tyre rule (`+10.0s` post-race penalty if skipped in `>= 3` lap races), Solid White Pit Exit Line warning, AI mid-race pit stops, and replaced the old fake HUD pit button with a `NEXT: MED` (`1–5`/`P`) strategy radio selector + live FIA Pit Crew Stopwatch banner.
+- **Play Mode & Dual Build Verification**:
+  - Verified in Unity 6.3 LTS Play Mode (`0` console errors; `snappedService=True`, `jackBodyY=0.150m`, `pitStops=1`, `newCompound=MED`, `tyreHealth=100%`, `mandatoryOk=True`).
+  - Rebuilt `MOTOVELO-WebGL/` (`15.1 MB` `.wasm`) and v2-signed `MOTOVELO.apk` (`54.8 MB` ARM64 IL2CPP).
