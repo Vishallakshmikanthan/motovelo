@@ -1,5 +1,24 @@
-# Reference APK (large third-party binary, excluded from repo)
+# Reference APK & large third-party reference media
 Monoposto.apk
+ref/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Unity build caches, generated IDE files, and debug symbols
+MotoveloUnity/Library/
+MotoveloUnity/Temp/
+MotoveloUnity/Obj/
+MotoveloUnity/Build/
+MotoveloUnity/Builds/
+MotoveloUnity/Logs/
+MotoveloUnity/UserSettings/
+MotoveloUnity/.utmp/
+MotoveloUnity/*.csproj
+MotoveloUnity/*.sln
+MotoveloUnity/*.slnx
+MOTOVELO_BurstDebugInformation_DoNotShip/
 
 # Node / Web build artifacts
 motovelo-web/node_modules/
