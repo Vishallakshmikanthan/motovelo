@@ -364,9 +364,19 @@ namespace Motovelo
             activeTrack = trackGo.AddComponent<SplineCircuit>();
             activeTrack.BuildFromDefinition(cDef, grandstandPrefab, pitBuildingPrefab, startGantryPrefab);
 
-            // Sky & Atmosphere for circuit
+            // Atmospheric Procedural Skybox & Horizon Fog for circuit
+            ColorUtility.TryParseHtmlString(cDef.skyTop, out Color skyTop);
             ColorUtility.TryParseHtmlString(cDef.skyHorizon, out Color skyHor);
-            if (mainCamera != null)
+            var skyTmpl = Resources.Load<Material>("Materials/MotoveloSkybox");
+            if (skyTmpl != null)
+            {
+                var skyMat = new Material(skyTmpl);
+                if (skyMat.HasProperty("_SkyTint")) skyMat.SetColor("_SkyTint", skyTop);
+                if (skyMat.HasProperty("_GroundColor")) skyMat.SetColor("_GroundColor", skyHor * 0.72f);
+                RenderSettings.skybox = skyMat;
+                if (mainCamera != null) mainCamera.clearFlags = CameraClearFlags.Skybox;
+            }
+            else if (mainCamera != null)
             {
                 mainCamera.clearFlags = CameraClearFlags.SolidColor;
                 mainCamera.backgroundColor = skyHor;
@@ -374,7 +384,7 @@ namespace Motovelo
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
             RenderSettings.fogColor = skyHor;
-            RenderSettings.fogDensity = 0.0011f;
+            RenderSettings.fogDensity = 0.00075f;
 
             // Spawn 22-car 2026 F1 Grid (or solo car in TimeTrial)
             var pTeam = CurrentTeam;
@@ -456,6 +466,11 @@ namespace Motovelo
             fastestLapBannerTimer = 0f;
             _pitStopTimer = 0f;
             activeTrack.SetStartLights(0);
+            if (playerCar != null)
+            {
+                var nextComp = MotoveloDatabase.Compounds[Mathf.Clamp(playerCar.nextPitCompoundIdx, 0, MotoveloDatabase.Compounds.Length - 1)];
+                activeTrack.SpawnPlayerPitCrew(playerCar.team, CurrentHelmetId, nextComp, wheelPrefab);
+            }
             cameraRig.ResetSnap();
 
             SetScreenState(MotoveloScreenState.GridIntro);
@@ -471,10 +486,17 @@ namespace Motovelo
             }
         }
 
-        public void RequestPitStop()
+        public void CycleNextPitCompound(int explicitIdx = -1)
         {
-            if (playerCar == null || state != MotoveloScreenState.Racing) return;
-            playerCar.pitRequested = !playerCar.pitRequested;
+            if (playerCar == null) return;
+            if (explicitIdx >= 0 && explicitIdx < MotoveloDatabase.Compounds.Length)
+                playerCar.nextPitCompoundIdx = explicitIdx;
+            else
+                playerCar.nextPitCompoundIdx = (playerCar.nextPitCompoundIdx + 1) % MotoveloDatabase.Compounds.Length;
+
+            var nextComp = MotoveloDatabase.Compounds[playerCar.nextPitCompoundIdx];
+            activeTrack?.playerPitCrew?.UpdateSpareWheelCompoundVisuals(nextComp);
+            playerCar.RaiseFiaNotice($"PIT RADIO: CREW PREPARING {nextComp.label} TYRES — ENTER PIT LANE AT LAP END", 2.8f);
             audioSynth?.TriggerClick();
         }
 
@@ -537,16 +559,23 @@ namespace Motovelo
 
                 if (Input.GetKeyDown(KeyCode.C)) { cameraRig.CycleCamera(); audioSynth.TriggerClick(); }
                 if (Input.GetKeyDown(KeyCode.T)) { fullLeaderboard = !fullLeaderboard; audioSynth.TriggerClick(); }
-                if (Input.GetKeyDown(KeyCode.P)) RequestPitStop();
+                if (Input.GetKeyDown(KeyCode.P)) CycleNextPitCompound();
+                if (Input.GetKeyDown(KeyCode.Alpha1)) CycleNextPitCompound(0);
+                if (Input.GetKeyDown(KeyCode.Alpha2)) CycleNextPitCompound(1);
+                if (Input.GetKeyDown(KeyCode.Alpha3)) CycleNextPitCompound(2);
+                if (Input.GetKeyDown(KeyCode.Alpha4)) CycleNextPitCompound(3);
+                if (Input.GetKeyDown(KeyCode.Alpha5)) CycleNextPitCompound(4);
                 if (Input.GetKeyDown(KeyCode.E)) playerCar.inputShiftUp = true;
                 if (Input.GetKeyDown(KeyCode.Q)) playerCar.inputShiftDown = true;
+                if (Input.GetKeyDown(KeyCode.M)) { audioSynth.audioEnabled = !audioSynth.audioEnabled; }
                 if (Input.GetKeyDown(KeyCode.Escape)) SetScreenState(MotoveloScreenState.Paused);
 
                 cameraRig.UpdateRaceCamera(playerCar, activeTrack, dt);
 
                 audioSynth.engineActive = true;
                 audioSynth.rpm = playerCar.rpm;
-                audioSynth.throttle = playerCar.inputThrottle;
+                audioSynth.throttle = playerCar.smoothThrottle;
+                audioSynth.speedMps = playerCar.speed;
                 audioSynth.slip = playerCar.slipAmount;
                 audioSynth.kerb = playerCar.kerbRumble;
 
@@ -588,7 +617,7 @@ namespace Motovelo
                 raceTime += dt;
                 if (fastestLapBannerTimer > 0f) fastestLapBannerTimer -= dt;
                 UpdateSlipstreamAndYellowFlags();
-                UpdatePlayerPitStop(dt);
+                UpdatePitCrewAnimation();
             }
 
             bool canMove = state == MotoveloScreenState.Racing;
@@ -601,7 +630,7 @@ namespace Motovelo
                 if (!c.isPlayer && aiIdx < _aiList.Count)
                 {
                     if (canMove)
-                        _aiList[aiIdx].UpdateAIInputs(c, cars, activeTrack, dt);
+                        _aiList[aiIdx].UpdateAIInputs(c, cars, activeTrack, dt, selectedLaps);
                     else
                     {
                         c.inputThrottle = 0.4f;
@@ -611,7 +640,7 @@ namespace Motovelo
                     aiIdx++;
                 }
 
-                c.StepPhysics(dt, activeTrack, raceTime, selectedLaps, canMove && !c.inPit,
+                c.StepPhysics(dt, activeTrack, raceTime, selectedLaps, canMove,
                     out bool shifted, out bool crossedLap, out _);
 
                 if (crossedLap && c.lastLapTime < fastestLapTime)
@@ -675,33 +704,19 @@ namespace Motovelo
             }
         }
 
-        private void UpdatePlayerPitStop(float dt)
+        private void UpdatePitCrewAnimation()
         {
-            if (playerCar.pitRequested && !playerCar.inPit && (playerCar.projection.t > 0.94f || playerCar.projection.t < 0.04f))
-            {
-                playerCar.inPit = true;
-                playerCar.pitRequested = false;
-                _pitStopTimer = 2.2f;
-            }
-            if (playerCar.inPit)
-            {
-                _pitStopTimer -= dt;
-                playerCar.speed *= Mathf.Exp(-6f * dt);
-                if (_pitStopTimer <= 0f)
-                {
-                    playerCar.inPit = false;
-                    playerCar.pitStops++;
-                    playerCar.tyreHealth = 100f;
-                    playerCar.tyreTemp = 88f;
-                    int nextComp = (selectedCompoundIdx + 1) % 3;
-                    playerCar.compound = MotoveloDatabase.Compounds[nextComp];
-                    audioSynth?.TriggerBeep(true);
-                }
-            }
+            if (activeTrack == null || activeTrack.playerPitCrew == null || playerCar == null) return;
+            bool servicing = playerCar.pitPhase == PitLanePhase.ServicingInBox;
+            float phaseNorm = servicing ? Mathf.Clamp01(playerCar.pitServiceTimer / 2.50f) : 0f;
+            float lift = activeTrack.playerPitCrew.AnimateCrew(servicing, phaseNorm, activeTrack.pitSide);
+            if (servicing && playerCar.visuals != null)
+                playerCar.visuals.SetJackLift(lift);
         }
 
         private void ResolveCarToCarCollisions()
         {
+            float dt = Time.fixedDeltaTime;
             int n = cars.Count;
             for (int i = 0; i < n; i++)
             {
@@ -712,15 +727,17 @@ namespace Motovelo
                     Vector3 d = b.transform.position - a.transform.position;
                     d.y = 0f;
                     float dist = d.magnitude;
-                    const float minDist = 2.65f;
+                    const float minDist = 2.12f; // Realistic 2.0m F1 car width wheel-to-wheel clearance!
                     if (dist > 0.001f && dist < minDist)
                     {
                         Vector3 nrm = d / dist;
-                        float push = (minDist - dist) * 0.52f;
+                        float push = (minDist - dist) * 0.50f;
                         a.transform.position -= nrm * push;
                         b.transform.position += nrm * push;
-                        a.speed *= 0.95f;
-                        b.speed *= 0.95f;
+                        // Gentle dt-scaled wheel-rub friction so side-by-side racing stays fast & competitive!
+                        float rub = Mathf.Clamp01(1f - 0.22f * dt);
+                        a.speed *= rub;
+                        b.speed *= rub;
                     }
                 }
             }
