@@ -12,6 +12,10 @@ namespace Motovelo
         public Transform driverHelmet;
         public Transform steeringWheel;
 
+        private Material _rainLightMat;
+        private Material _drsLedMat;
+        private float _jackLift;
+
         public void Assemble(
             GameObject carChassisPrefab,
             GameObject wheelPrefab,
@@ -30,7 +34,6 @@ namespace Motovelo
             var chassis = Instantiate(carChassisPrefab, bodyRoot);
             chassis.name = "Chassis";
             chassis.transform.localPosition = Vector3.zero;
-            // Rotate 180 deg Y so sculpted MonocoqueNose + FrontWing + Halo face +Z forward!
             chassis.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
 
             var liveryTex = MotoveloDatabase.LoadTex($"Textures/liveries/{team.id}");
@@ -38,13 +41,14 @@ namespace Motovelo
             var suitTex   = MotoveloDatabase.LoadTex($"Textures/suits/{suitId}");
             var tyreTex   = MotoveloDatabase.LoadTex($"Textures/tyres/{compound.id}");
 
-            var liveryMat = MotoveloDatabase.CreateUrpLit(Color.white, liveryTex, 0.28f, 0.80f);
-            var carbonMat = MotoveloDatabase.CreateUrpLit(new Color(0.04f, 0.045f, 0.052f), null, 0.22f, 0.62f);
-            var helmetMat = MotoveloDatabase.CreateUrpLit(Color.white, helmetTex, 0.25f, 0.86f);
-            var suitMat   = MotoveloDatabase.CreateUrpLit(Color.white, suitTex, 0.05f, 0.35f);
-            var visorMat  = MotoveloDatabase.CreateUrpLit(new Color(0.02f, 0.05f, 0.14f), null, 0.95f, 0.96f);
-            var mirrorMat = MotoveloDatabase.CreateUrpLit(new Color(0.80f, 0.85f, 0.92f), null, 0.98f, 0.96f);
-            var rainMat   = MotoveloDatabase.CreateUrpEmissive(new Color(1f, 0.06f, 0.06f), new Color(2.5f, 0.1f, 0.1f), 0.8f);
+            var liveryMat = MotoveloDatabase.CreateUrpLit(Color.white, liveryTex, 0.32f, 0.84f);
+            var carbonMat = MotoveloDatabase.CreateUrpLit(new Color(0.045f, 0.050f, 0.058f), null, 0.28f, 0.68f);
+            var helmetMat = MotoveloDatabase.CreateUrpLit(Color.white, helmetTex, 0.28f, 0.88f);
+            var suitMat   = MotoveloDatabase.CreateUrpLit(Color.white, suitTex, 0.05f, 0.38f);
+            var visorMat  = MotoveloDatabase.CreateUrpLit(new Color(0.02f, 0.05f, 0.14f), null, 0.96f, 0.97f);
+            var mirrorMat = MotoveloDatabase.CreateUrpLit(new Color(0.82f, 0.87f, 0.94f), null, 0.98f, 0.97f);
+            _rainLightMat = MotoveloDatabase.CreateUrpEmissive(new Color(1f, 0.06f, 0.06f), new Color(2.6f, 0.1f, 0.1f), 0.85f);
+            _drsLedMat    = MotoveloDatabase.CreateUrpEmissive(new Color(0.10f, 0.18f, 0.12f), Color.black, 0.85f);
 
             Transform rawDrs = null;
             Transform rawHelmet = null;
@@ -63,17 +67,27 @@ namespace Motovelo
                 else if (mName.Contains("DriverSuitMat")) r.sharedMaterial = suitMat;
                 else if (mName.Contains("Visor")) r.sharedMaterial = visorMat;
                 else if (mName.Contains("MirrorGlass")) r.sharedMaterial = mirrorMat;
-                else if (mName.Contains("RainLight")) r.sharedMaterial = rainMat;
+                else if (mName.Contains("RainLight")) r.sharedMaterial = _rainLightMat;
                 else r.sharedMaterial = carbonMat;
             }
 
-            drsFlap = WrapInCenteredPivot(rawDrs, "DrsHingePivot");
-            driverHelmet = WrapInCenteredPivot(rawHelmet, "HelmetNeckPivot");
-            steeringWheel = WrapInCenteredPivot(rawSteer, "SteeringShaftPivot");
+            // Pivot DRS upper flap around its upper-rear hinge so opening flips the leading edge clearly UP & FLAT (-44 deg)!
+            drsFlap = WrapInPivotWithOffset(rawDrs, "DrsHingePivot", new Vector3(0f, 0.03f, -0.06f));
+            driverHelmet = WrapInPivotWithOffset(rawHelmet, "HelmetNeckPivot", Vector3.zero);
+            steeringWheel = WrapInPivotWithOffset(rawSteer, "SteeringShaftPivot", Vector3.zero);
+
+            // Add twin FIA Rear Endplate DRS Status LEDs (glow neon-green when DRS opens!)
+            for (int s = -1; s <= 1; s += 2)
+            {
+                var led = MotoveloDatabase.CreateCubeObject($"DrsWingtipLed_{s}", bodyRoot);
+                led.transform.localPosition = new Vector3(s * 0.545f, 0.96f, -2.14f);
+                led.transform.localScale = new Vector3(0.025f, 0.045f, 0.16f);
+                led.GetComponent<Renderer>().sharedMaterial = _drsLedMat;
+            }
 
             // Build 4 Articulated Wheels
-            var rubberMat   = MotoveloDatabase.CreateUrpLit(new Color(0.045f, 0.047f, 0.052f), null, 0.03f, 0.24f);
-            var sidewallMat = MotoveloDatabase.CreateUrpLit(Color.white, tyreTex, 0.05f, 0.45f, true);
+            var rubberMat   = MotoveloDatabase.CreateUrpLit(new Color(0.045f, 0.048f, 0.054f), null, 0.04f, 0.28f);
+            var sidewallMat = MotoveloDatabase.CreateUrpLit(Color.white, tyreTex, 0.06f, 0.48f, true);
 
             Transform SpawnWheel(string wName, Transform parent, Vector3 localPos, bool isRear)
             {
@@ -93,7 +107,6 @@ namespace Motovelo
                 return w.transform;
             }
 
-            // Note: FBX exported with +Z forward, +Y up! Front axle z = +1.75, Rear axle z = -1.65
             var flPivotGo = new GameObject("PivotFL");
             flPivotGo.transform.SetParent(transform, false);
             flPivotGo.transform.localPosition = new Vector3(-0.88f, 0.36f, 1.75f);
@@ -110,14 +123,49 @@ namespace Motovelo
             wheelMeshes[3] = SpawnWheel("WheelRR", transform, new Vector3(0.91f, 0.37f, -1.65f), true);
         }
 
-        public void SyncPose(float pitchRad, float rollRad, float steerRad, float wheelSpinRad, bool drsOpen)
+        public void SetJackLift(float liftMeters)
+        {
+            _jackLift = liftMeters;
+        }
+
+        public void SwapTyreCompound(CompoundDef newCompound)
+        {
+            if (newCompound == null) return;
+            var tyreTex = MotoveloDatabase.LoadTex($"Textures/tyres/{newCompound.id}");
+            var sidewallMat = MotoveloDatabase.CreateUrpLit(Color.white, tyreTex, 0.06f, 0.48f, true);
+            for (int i = 0; i < 4; i++)
+            {
+                if (wheelMeshes[i] == null) continue;
+                foreach (var r in wheelMeshes[i].GetComponentsInChildren<Renderer>())
+                {
+                    string mName = r.sharedMaterial != null ? r.sharedMaterial.name : "";
+                    if (mName.Contains("TireSidewall"))
+                        r.sharedMaterial = sidewallMat;
+                }
+            }
+        }
+
+        public void SyncPose(float pitchRad, float rollRad, float steerRad, float wheelSpinRad, bool drsOpen, bool ersHarvesting = false)
         {
             if (bodyRoot != null)
+            {
+                bodyRoot.localPosition = new Vector3(0f, _jackLift, 0f);
                 bodyRoot.localRotation = Quaternion.Euler(pitchRad * Mathf.Rad2Deg, 0f, rollRad * Mathf.Rad2Deg);
+            }
 
             float steerDeg = -steerRad * Mathf.Rad2Deg * 1.45f;
-            if (frontLeftPivot != null)  frontLeftPivot.localRotation  = Quaternion.Euler(0f, steerDeg, 0f);
-            if (frontRightPivot != null) frontRightPivot.localRotation = Quaternion.Euler(0f, steerDeg, 0f);
+            if (frontLeftPivot != null)
+            {
+                frontLeftPivot.localPosition = new Vector3(-0.88f, 0.36f + _jackLift, 1.75f);
+                frontLeftPivot.localRotation = Quaternion.Euler(0f, steerDeg, 0f);
+            }
+            if (frontRightPivot != null)
+            {
+                frontRightPivot.localPosition = new Vector3(0.88f, 0.36f + _jackLift, 1.75f);
+                frontRightPivot.localRotation = Quaternion.Euler(0f, steerDeg, 0f);
+            }
+            if (wheelMeshes[2] != null) wheelMeshes[2].localPosition = new Vector3(-0.91f, 0.37f + _jackLift, -1.65f);
+            if (wheelMeshes[3] != null) wheelMeshes[3].localPosition = new Vector3( 0.91f, 0.37f + _jackLift, -1.65f);
 
             float spinDeg = wheelSpinRad * Mathf.Rad2Deg;
             for (int i = 0; i < 4; i++)
@@ -127,28 +175,42 @@ namespace Motovelo
             }
 
             if (driverHelmet != null)
-                driverHelmet.localRotation = Quaternion.Euler(0f, steerDeg * 0.42f, -rollRad * Mathf.Rad2Deg * 1.3f);
+                driverHelmet.localRotation = Quaternion.Euler(0f, steerDeg * 0.45f, -rollRad * Mathf.Rad2Deg * 1.3f);
 
             if (steeringWheel != null)
                 steeringWheel.localRotation = Quaternion.Euler(0f, 0f, -steerDeg * 2.4f);
 
             if (drsFlap != null)
             {
-                Quaternion targetRot = Quaternion.Euler(drsOpen ? -20f : 0f, 0f, 0f);
-                drsFlap.localRotation = Quaternion.Slerp(drsFlap.localRotation, targetRot, 0.25f);
+                // Rotate +42 deg around trailing hinge so leading edge of upper DRS flap lifts wide open & horizontal!
+                Quaternion targetRot = Quaternion.Euler(drsOpen ? 42f : 0f, 0f, 0f);
+                drsFlap.localRotation = Quaternion.Slerp(drsFlap.localRotation, targetRot, 0.28f);
+            }
+
+            if (_drsLedMat != null && _drsLedMat.HasProperty("_EmissionColor"))
+            {
+                _drsLedMat.SetColor("_BaseColor", drsOpen ? new Color(0.1f, 1f, 0.35f) : new Color(0.10f, 0.14f, 0.10f));
+                _drsLedMat.SetColor("_EmissionColor", drsOpen ? new Color(0.2f, 3.2f, 0.8f) : Color.black);
+            }
+
+            if (_rainLightMat != null && _rainLightMat.HasProperty("_EmissionColor"))
+            {
+                // Authentic FIA MGU-K Harvesting Blink in warm ruby-red (no ACES magenta shift!)
+                bool blinkOn = !ersHarvesting || (Mathf.FloorToInt(Time.time * 10f) % 2 == 0);
+                _rainLightMat.SetColor("_BaseColor", new Color(0.95f, 0.12f, 0.04f));
+                _rainLightMat.SetColor("_EmissionColor", blinkOn ? new Color(2.2f, 0.24f, 0.02f) : new Color(0.18f, 0.02f, 0.01f));
             }
         }
 
-        private Transform WrapInCenteredPivot(Transform part, string pivotName)
+        private Transform WrapInPivotWithOffset(Transform part, string pivotName, Vector3 localOffset)
         {
             if (part == null) return null;
             var rend = part.GetComponent<Renderer>();
             if (rend == null) return null;
 
-            Transform parent = part.parent;
             var pivotGo = new GameObject(pivotName);
             pivotGo.transform.SetParent(bodyRoot, false);
-            Vector3 localCenter = bodyRoot.InverseTransformPoint(rend.bounds.center);
+            Vector3 localCenter = bodyRoot.InverseTransformPoint(rend.bounds.center) + localOffset;
             pivotGo.transform.localPosition = localCenter;
             pivotGo.transform.localRotation = Quaternion.identity;
             part.SetParent(pivotGo.transform, true);
