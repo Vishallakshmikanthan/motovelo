@@ -142,6 +142,22 @@ namespace Motovelo.Editor
                 mat.SetColor("_EmissionColor", new Color(2.8f, 0.12f, 0.12f, 1f));
                 mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             });
+
+            // 5. Procedural Atmospheric Skybox Template (prevents shader stripping on WebGL & Android!)
+            Shader skyShader = Shader.Find("Skybox/Procedural");
+            if (skyShader != null)
+            {
+                SaveOrUpdateMaterial($"{dir}/MotoveloSkybox.mat", skyShader, mat =>
+                {
+                    if (mat.HasProperty("_SunDisk")) mat.SetInt("_SunDisk", 2);
+                    if (mat.HasProperty("_SunSize")) mat.SetFloat("_SunSize", 0.036f);
+                    if (mat.HasProperty("_SunSizeConvergence")) mat.SetFloat("_SunSizeConvergence", 6f);
+                    if (mat.HasProperty("_AtmosphereThickness")) mat.SetFloat("_AtmosphereThickness", 0.92f);
+                    if (mat.HasProperty("_SkyTint")) mat.SetColor("_SkyTint", new Color(0.32f, 0.54f, 0.86f, 1f));
+                    if (mat.HasProperty("_GroundColor")) mat.SetColor("_GroundColor", new Color(0.36f, 0.38f, 0.42f, 1f));
+                    if (mat.HasProperty("_Exposure")) mat.SetFloat("_Exposure", 1.15f);
+                });
+            }
         }
 
         private static void SaveOrUpdateMaterial(string assetPath, Shader shader, Action<Material> configure)
@@ -221,7 +237,8 @@ namespace Motovelo.Editor
             if (pcRp != null)
             {
                 pcRp.renderScale = 1.0f;
-                pcRp.msaaSampleCount = 1;
+                pcRp.msaaSampleCount = 4; // Crisp 4x MSAA anti-aliasing!
+                pcRp.shadowDistance = 145f; // Long crisp shadows down F1 straights!
                 EditorUtility.SetDirty(pcRp);
                 GraphicsSettings.defaultRenderPipeline = pcRp;
 
@@ -231,13 +248,15 @@ namespace Motovelo.Editor
                 {
                     QualitySettings.SetQualityLevel(q, false);
                     QualitySettings.renderPipeline = pcRp;
+                    QualitySettings.anisotropicFiltering = AnisotropicFiltering.ForceEnable;
                 }
                 QualitySettings.SetQualityLevel(origQ, false);
             }
             if (mobRp != null)
             {
                 mobRp.renderScale = 1.0f;
-                mobRp.msaaSampleCount = 1;
+                mobRp.msaaSampleCount = 2;
+                mobRp.shadowDistance = 120f;
                 EditorUtility.SetDirty(mobRp);
             }
         }
@@ -431,6 +450,51 @@ namespace Motovelo.Editor
             BuildReport report = BuildPipeline.BuildPlayer(opts);
             if (report.summary.result != BuildResult.Succeeded)
                 throw new Exception("Windows smoke test build failed: " + report.summary.result);
+        }
+
+        [MenuItem("Motovelo/4. Build WebGL (Browser)")]
+        public static void BuildWebGL()
+        {
+            SetupSceneAndVisualBaseline();
+
+            // WebGL browser-friendly settings (Decompression Fallback ensures instant play on any static/local server)
+            PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
+            PlayerSettings.WebGL.decompressionFallback = true;
+            PlayerSettings.WebGL.dataCaching = true;
+            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
+            PlayerSettings.SetManagedStrippingLevel(UnityEditor.Build.NamedBuildTarget.WebGL, ManagedStrippingLevel.Minimal);
+
+            string outDir = @"c:\Users\Lenovo\Downloads\motovelo\MOTOVELO-WebGL";
+            if (!Directory.Exists(outDir))
+                Directory.CreateDirectory(outDir);
+
+            var opts = new BuildPlayerOptions
+            {
+                scenes = new[] { "Assets/Scenes/Main.unity" },
+                locationPathName = outDir,
+                target = BuildTarget.WebGL,
+                options = BuildOptions.None
+            };
+
+            Debug.Log("[MotoveloBuilder] Starting WebGL browser build -> " + outDir);
+            BuildReport report = BuildPipeline.BuildPlayer(opts);
+            BuildSummary summary = report.summary;
+
+            if (summary.result == BuildResult.Succeeded)
+            {
+                Debug.Log($"[MotoveloBuilder] WEBGL BUILD SUCCEEDED! Size: {summary.totalSize / (1024 * 1024)} MB -> {outDir}");
+            }
+            else
+            {
+                throw new Exception($"[MotoveloBuilder] WEBGL BUILD FAILED: {summary.result} (Errors: {summary.totalErrors})");
+            }
+        }
+
+        [MenuItem("Motovelo/5. Build Both Android APK + WebGL")]
+        public static void BuildAndroidAndWebGL()
+        {
+            BuildAndroidApk();
+            BuildWebGL();
         }
     }
 }
