@@ -13,6 +13,7 @@ namespace Motovelo
         private Font _font;
         private Sprite _roundedSprite;
         private Sprite _circleSprite;
+        private Sprite _ringSprite;
 
         // Screen Panels
         private GameObject _panelShowroom;
@@ -55,16 +56,34 @@ namespace Motovelo
         private Text _gridTeamTxt;
         private Text _gridPosTxt;
 
-        // HUD UI refs
+        // HUD UI refs (LibreCorsa Broadcast Style)
+        private struct TowerRowUI
+        {
+            public GameObject root;
+            public Image bg;
+            public Text posTxt;
+            public Image teamBar;
+            public Text codeTxt;
+            public Image tyreBg;
+            public Text tyreTxt;
+            public Text gapTxt;
+        }
+        private readonly List<TowerRowUI> _towerRows = new List<TowerRowUI>();
+        private Image _aheadBarImg;
+        private Text _aheadCodeTxt;
+        private Text _aheadGapTxt;
         private Text _towerHeaderTxt;
         private Image _towerHeaderBg;
         private Text _hudLapTxt;
-        private Text _towerBodyTxt;
+        private RectTransform _minimapWrapRt;
         private RawImage _minimapImg;
         private Texture2D _minimapTex;
         private Color32[] _minimapClear;
         private readonly Image[] _startLightLenses = new Image[5];
         private GameObject _startLightsWrap;
+        private Text _startLightsBannerTxt;
+        private float _lightsOutBannerTimer;
+        private bool _wasInCountdown;
         private GameObject _flBannerWrap;
         private Text _flBannerTxt;
         private GameObject _pitStatusBannerWrap;
@@ -72,15 +91,33 @@ namespace Motovelo
         private Text _pitStatusBannerTxt;
         private Text _nextTyreBtnTxt;
         private Text _hudSpeedTxt;
+        private Text _hudRpmTxt;
+        private Image _speedRingFill;
         private Text _hudGearTxt;
+        private Text _hudGearSubTxt;
+        private Text _hudPosBigTxt;
+        private Text _hudPosTotalTxt;
         private Text _hudTimeTxt;
         private Text _hudBestTxt;
-        private Text _hudSectorsTxt;
+        private readonly Image[] _sectorBars = new Image[3];
+        private readonly Text[] _sectorLabels = new Text[3];
+        private Text _weatherTempTxt;
+        private Text _weatherTrackTxt;
+        private Text _battPctTxt;
         private Image _ersBarFill;
+        private Image _overtakePillBg;
+        private Text _overtakePillTxt;
         private Image _drsBadgeBg;
         private Text _drsBadgeTxt;
         private Text _sfxBtnTxt;
         private Image _pitBtnBg;
+        private Text _assistPillTxt;
+        private readonly Image[] _tyreRings = new Image[4];
+        private readonly Text[] _tyrePcts = new Text[4];
+        private readonly Image[] _carTyreRects = new Image[4];
+        private Image _cardCompoundBg;
+        private Text _cardCompoundTxt;
+        private Text _damageStatusTxt;
         private readonly Image[] _rpmDots = new Image[11];
 
         // Multi-touch buttons
@@ -113,6 +150,7 @@ namespace Motovelo
 
             _roundedSprite = CreateRoundedRectSprite(64, 14);
             _circleSprite = CreateCircleSprite(64);
+            _ringSprite = CreateRingSprite(128, 12);
 
             EnsureEventSystem();
 
@@ -417,105 +455,289 @@ namespace Motovelo
         }
 
         // =====================================================================
-        // 6. CLEAN MONOPOSTO BROADCAST HUD & EFFORTLESS TOUCH CONTROLS
+        // 6. LIBRECORSA-INSPIRED BROADCAST HUD & ERGONOMIC TOUCH CONTROLS
         // =====================================================================
         private void BuildHudPanel(Transform root)
         {
             _panelHud = CreateFullScreenPanel(root, "PanelHud", Color.clear);
 
-            // Top-Left F1 Leaderboard Tower
-            var tower = CreatePanel(_panelHud.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(24, -460), new Vector2(290, -20), new Color(0.04f, 0.05f, 0.08f, 0.84f), true);
-            var tHdr = CreatePanel(tower.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -34), Vector2.zero, new Color(0.82f, 0.06f, 0.11f, 0.96f));
-            _towerHeaderBg = tHdr.GetComponent<Image>();
-            _towerHeaderTxt = CreateLabel(tHdr.transform, "MOTOVELO GP", 16, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            _hudLapTxt = CreateLabel(tower.transform, "LAP 1/3", 16, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.92f, 0.94f, 0.98f), new Vector2(0, 1), new Vector2(1, 1), new Vector2(10, -62), new Vector2(-10, -36));
-            _towerBodyTxt = CreateLabel(tower.transform, "", 16, FontStyle.Bold, TextAnchor.UpperLeft, Color.white, new Vector2(0, 0), new Vector2(1, 1), new Vector2(10, 8), new Vector2(-10, -66));
-            _towerBodyTxt.lineSpacing = 1.18f;
+            Color cardBg = new Color(0.05f, 0.06f, 0.09f, 0.88f);
+            Color cardBorder = new Color(1f, 1f, 1f, 0.14f);
+            Color dividerCol = new Color(1f, 1f, 1f, 0.10f);
 
-            // Top-Left Circular Track Radar Minimap
-            var mapWrap = CreatePanel(_panelHud.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(306, -212), new Vector2(498, -20), new Color(0.06f, 0.08f, 0.12f, 0.55f), true);
-            mapWrap.GetComponent<Image>().sprite = _circleSprite;
+            // -----------------------------------------------------------------
+            // TOP-LEFT: LIBRECORSA LEADERBOARD CARD (LAP + ROWS + AHEAD FOOTER)
+            // -----------------------------------------------------------------
+            var towerOuter = CreatePanel(_panelHud.transform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(24, -296), new Vector2(310, -20), cardBorder, true);
+            var tower = CreatePanel(towerOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
+
+            var tHdr = CreatePanel(tower.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -34), Vector2.zero, new Color(0.08f, 0.10f, 0.14f, 0.92f));
+            _towerHeaderBg = tHdr.GetComponent<Image>();
+            _hudLapTxt = CreateLabel(tHdr.transform, "LAP 1/3", 17, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(8, 0), new Vector2(-8, 0));
+            _towerHeaderTxt = _hudLapTxt;
+            CreatePanel(tower.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -35), new Vector2(0, -34), dividerCol);
+
+            _towerRows.Clear();
+            const int maxTowerRows = 14;
+            for (int i = 0; i < maxTowerRows; i++)
+            {
+                float yTop = -38f - i * 32f;
+                var rowGo = CreatePanel(tower.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(4, yTop - 30f), new Vector2(-4, yTop), Color.clear, true);
+                var rowBg = rowGo.GetComponent<Image>();
+                var posTxt = CreateLabel(rowGo.transform, $"{i + 1}", 14, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.75f, 0.78f, 0.85f), new Vector2(0, 0), new Vector2(0, 1), new Vector2(4, 0), new Vector2(28, 0));
+                var barGo = CreatePanel(rowGo.transform, new Vector2(0, 0.18f), new Vector2(0, 0.82f), new Vector2(34, 0), new Vector2(38, 0), Color.white);
+                var codeTxt = CreateLabel(rowGo.transform, "VER", 15, FontStyle.BoldAndItalic, TextAnchor.MiddleLeft, Color.white, new Vector2(0, 0), new Vector2(0, 1), new Vector2(46, 0), new Vector2(124, 0));
+
+                var tyreGo = CreatePanel(rowGo.transform, new Vector2(0.58f, 0.5f), new Vector2(0.58f, 0.5f), new Vector2(-10, -10), new Vector2(10, 10), new Color(0.88f, 0.12f, 0.18f, 1f));
+                var tyreImg = tyreGo.GetComponent<Image>();
+                tyreImg.sprite = _circleSprite;
+                var tyreTxt = CreateLabel(tyreGo.transform, "S", 11, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+                var gapTxt = CreateLabel(rowGo.transform, "+0.000", 14, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.88f, 0.90f, 0.95f), new Vector2(0.64f, 0), new Vector2(1, 1), Vector2.zero, new Vector2(-8, 0));
+
+                rowGo.SetActive(i < 5);
+                _towerRows.Add(new TowerRowUI
+                {
+                    root = rowGo,
+                    bg = rowBg,
+                    posTxt = posTxt,
+                    teamBar = barGo.GetComponent<Image>(),
+                    codeTxt = codeTxt,
+                    tyreBg = tyreImg,
+                    tyreTxt = tyreTxt,
+                    gapTxt = gapTxt
+                });
+            }
+
+            // Bottom AHEAD footer inside leaderboard card
+            CreatePanel(tower.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 34), new Vector2(0, 35), dividerCol);
+            CreateLabel(tower.transform, "AHEAD", 12, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.65f, 0.69f, 0.76f), new Vector2(0, 0), new Vector2(0, 0), new Vector2(12, 2), new Vector2(76, 32));
+            var aheadBar = CreatePanel(tower.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(82, 8), new Vector2(86, 26), Color.white);
+            _aheadBarImg = aheadBar.GetComponent<Image>();
+            _aheadCodeTxt = CreateLabel(tower.transform, "---", 14, FontStyle.BoldAndItalic, TextAnchor.MiddleLeft, Color.white, new Vector2(0, 0), new Vector2(0, 0), new Vector2(94, 2), new Vector2(165, 32));
+            _aheadGapTxt = CreateLabel(tower.transform, "-.---", 14, FontStyle.Bold, TextAnchor.MiddleRight, Color.white, new Vector2(0.55f, 0), new Vector2(1, 0), new Vector2(0, 2), new Vector2(-12, 32));
+
+            // -----------------------------------------------------------------
+            // TOP-CENTER: LIBRECORSA START LIGHTS / LIGHTS OUT & STATUS BANNERS
+            // -----------------------------------------------------------------
+            var lightsOuter = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-240, -142), new Vector2(240, -20), cardBorder, true);
+            _startLightsWrap = lightsOuter;
+            var lightsInner = CreatePanel(lightsOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), new Color(0.05f, 0.06f, 0.09f, 0.92f), true);
+            for (int i = 0; i < 5; i++)
+            {
+                float x = (i - 2) * 34f;
+                var pod = CreatePanel(lightsInner.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(x - 11, -34), new Vector2(x + 11, -12), new Color(0.18f, 0.04f, 0.05f, 1f));
+                var img = pod.GetComponent<Image>();
+                img.sprite = _circleSprite;
+                _startLightLenses[i] = img;
+            }
+            _startLightsBannerTxt = CreateLabel(lightsInner.transform, "LIGHTS OUT", 44, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter, Color.white, new Vector2(0, 0), new Vector2(1, 0.72f), new Vector2(12, 6), new Vector2(-12, -4));
+
+            // Fastest Lap Purple Banner
+            _flBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-230, -82), new Vector2(230, -22), new Color(0.54f, 0.08f, 0.78f, 0.94f), true);
+            _flBannerTxt = CreateLabel(_flBannerWrap.transform, "FASTEST LAP", 17, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(12, 0), new Vector2(-12, 0));
+
+            // Live FIA Pit Lane, Pit Crew Stopwatch & Stewards Regulation Banner
+            _pitStatusBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-340, -152), new Vector2(340, -92), new Color(0.06f, 0.08f, 0.12f, 0.94f), true);
+            _pitStatusBannerBg = _pitStatusBannerWrap.GetComponent<Image>();
+            _pitStatusBannerTxt = CreateLabel(_pitStatusBannerWrap.transform, "", 16, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(14, 0), new Vector2(-14, 0));
+            _pitStatusBannerWrap.SetActive(false);
+
+            // -----------------------------------------------------------------
+            // TOP-RIGHT: LIBRECORSA TIMING & WEATHER CARDS + ACTION PILLS
+            // -----------------------------------------------------------------
+            var timingOuter = CreatePanel(_panelHud.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-346, -158), new Vector2(-24, -20), cardBorder, true);
+            var timing = CreatePanel(timingOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
+
+            // Sector Strip (S1 | S2 | S3)
+            for (int s = 0; s < 3; s++)
+            {
+                float x0 = s / 3f;
+                float x1 = (s + 1) / 3f;
+                var sBar = CreatePanel(timing.transform, new Vector2(x0, 1), new Vector2(x1, 1), new Vector2(4, -4), new Vector2(-4, -1), new Color(1f, 1f, 1f, 0.14f));
+                _sectorBars[s] = sBar.GetComponent<Image>();
+                _sectorLabels[s] = CreateLabel(timing.transform, $"S{s + 1}", 12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.75f, 0.79f, 0.86f), new Vector2(x0, 1), new Vector2(x1, 1), new Vector2(0, -28), new Vector2(0, -4));
+            }
+            CreatePanel(timing.transform, new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -30), new Vector2(0, -29), dividerCol);
+
+            // Big Position + Lap Time
+            _hudPosBigTxt = CreateLabel(timing.transform, "1", 38, FontStyle.BoldAndItalic, TextAnchor.MiddleLeft, Color.white, new Vector2(0, 0.28f), new Vector2(0.24f, 0.78f), new Vector2(14, 0), Vector2.zero);
+            _hudPosTotalTxt = CreateLabel(timing.transform, "/22", 16, FontStyle.Bold, TextAnchor.LowerLeft, new Color(0.65f, 0.69f, 0.76f), new Vector2(0.18f, 0.34f), new Vector2(0.38f, 0.62f), Vector2.zero, Vector2.zero);
+            _hudTimeTxt = CreateLabel(timing.transform, "0:00.000", 30, FontStyle.Bold, TextAnchor.MiddleRight, Color.white, new Vector2(0.36f, 0.28f), new Vector2(1, 0.78f), Vector2.zero, new Vector2(-14, 0));
+
+            CreatePanel(timing.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 36), new Vector2(0, 37), dividerCol);
+            CreateLabel(timing.transform, "BEST", 12, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.62f, 0.66f, 0.74f), new Vector2(0, 0), new Vector2(0.35f, 0), new Vector2(14, 4), new Vector2(0, 34));
+            _hudBestTxt = CreateLabel(timing.transform, "-:--.---", 16, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.82f, 0.86f, 0.92f), new Vector2(0.35f, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-14, 34));
+
+            // Weather / Track Condition Card below Timing Card
+            var weatherOuter = CreatePanel(_panelHud.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-346, -226), new Vector2(-24, -166), cardBorder, true);
+            var weatherCard = CreatePanel(weatherOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
+            _weatherTempTxt = CreateLabel(weatherCard.transform, "AIR 27°   TRACK 41°   DRY", 13, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.86f, 0.90f, 0.95f), new Vector2(0, 0.45f), new Vector2(1, 1), new Vector2(14, 0), new Vector2(-14, -4));
+            _weatherTrackTxt = CreateLabel(weatherCard.transform, "TYRE 100%  •  88°C", 12, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.64f, 0.69f, 0.76f), new Vector2(0, 0), new Vector2(1, 0.48f), new Vector2(14, 4), new Vector2(-14, 0));
+
+            // Compact Action Pills below Weather Card (SFX, TOWER, CAM, PAUSE)
+            var sfxGo = CreateActionButton(_panelHud.transform, "SFX ON", new Vector2(1, 1), new Vector2(-306, -254), new Vector2(78, 34), cardBg, () => { if (_gm.audioSynth != null) { _gm.audioSynth.audioEnabled = !_gm.audioSynth.audioEnabled; if (_sfxBtnTxt != null) _sfxBtnTxt.text = _gm.audioSynth.audioEnabled ? "SFX ON" : "MUTED"; } });
+            _sfxBtnTxt = sfxGo.GetComponentInChildren<Text>();
+            if (_sfxBtnTxt != null) _sfxBtnTxt.fontSize = 12;
+
+            var towerBtn = CreateActionButton(_panelHud.transform, "TOWER", new Vector2(1, 1), new Vector2(-222, -254), new Vector2(78, 34), cardBg, () => { _gm.fullLeaderboard = !_gm.fullLeaderboard; _gm.audioSynth?.TriggerClick(); });
+            var towerBtnTxt = towerBtn.GetComponentInChildren<Text>();
+            if (towerBtnTxt != null) towerBtnTxt.fontSize = 12;
+
+            var camBtn = CreateActionButton(_panelHud.transform, "CAM", new Vector2(1, 1), new Vector2(-138, -254), new Vector2(78, 34), cardBg, () => { _gm.cameraRig.CycleCamera(); _gm.audioSynth?.TriggerClick(); });
+            var camBtnTxt = camBtn.GetComponentInChildren<Text>();
+            if (camBtnTxt != null) camBtnTxt.fontSize = 12;
+
+            var pauseBtn = CreateActionButton(_panelHud.transform, "II", new Vector2(1, 1), new Vector2(-58, -254), new Vector2(68, 34), cardBg, () => _gm.SetScreenState(MotoveloScreenState.Paused));
+            var pauseBtnTxt = pauseBtn.GetComponentInChildren<Text>();
+            if (pauseBtnTxt != null) pauseBtnTxt.fontSize = 14;
+
+            // -----------------------------------------------------------------
+            // BOTTOM-LEFT: LIBRECORSA CIRCUIT MINIMAP CARD
+            // -----------------------------------------------------------------
+            var mapOuter = CreatePanel(_panelHud.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(24, 210), new Vector2(224, 370), cardBorder, true);
+            _minimapWrapRt = mapOuter.GetComponent<RectTransform>();
+            var mapInner = CreatePanel(mapOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), new Color(0.05f, 0.06f, 0.09f, 0.84f), true);
             var mapGo = new GameObject("MinimapRaw", typeof(RectTransform), typeof(RawImage));
-            mapGo.transform.SetParent(mapWrap.transform, false);
-            StretchFull(mapGo.GetComponent<RectTransform>(), 10);
+            mapGo.transform.SetParent(mapInner.transform, false);
+            StretchFull(mapGo.GetComponent<RectTransform>(), 8);
             _minimapImg = mapGo.GetComponent<RawImage>();
             _minimapTex = new Texture2D(128, 128, TextureFormat.RGBA32, false);
             _minimapClear = new Color32[128 * 128];
             _minimapImg.texture = _minimapTex;
 
-            // Top-Center 5 Red Start Lights
-            _startLightsWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-245, -180), new Vector2(245, -76), new Color(0.05f, 0.06f, 0.08f, 0.92f), true);
-            for (int i = 0; i < 5; i++)
-            {
-                float x = (i - 2) * 94f;
-                var pod = CreatePanel(_startLightsWrap.transform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(x - 34, -34), new Vector2(x + 34, 34), new Color(0.18f, 0.03f, 0.04f, 1f));
-                var img = pod.GetComponent<Image>();
-                img.sprite = _circleSprite;
-                _startLightLenses[i] = img;
-            }
+            // -----------------------------------------------------------------
+            // BOTTOM-CENTER: LIBRECORSA TELEMETRY POD (BATT + GEAR + KM/H)
+            // -----------------------------------------------------------------
+            var podWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-235, 16), new Vector2(235, 174), Color.clear);
 
-            // Fastest Lap Purple Banner
-            _flBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-230, -84), new Vector2(230, -20), new Color(0.54f, 0.08f, 0.78f, 0.94f), true);
-            _flBannerTxt = CreateLabel(_flBannerWrap.transform, "FASTEST LAP", 18, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(10, 0), new Vector2(-10, 0));
+            // Center Gear & Mode Card
+            var centerOuter = CreatePanel(podWrap.transform, new Vector2(0.5f, 0), new Vector2(0.5f, 1), new Vector2(-118, 6), new Vector2(118, -6), cardBorder, true);
+            var centerCard = CreatePanel(centerOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
 
-            // Live FIA Pit Lane, Pit Crew Stopwatch & Stewards Regulation Banner!
-            _pitStatusBannerWrap = CreatePanel(_panelHud.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(-340, -152), new Vector2(340, -92), new Color(0.06f, 0.08f, 0.12f, 0.94f), true);
-            _pitStatusBannerBg = _pitStatusBannerWrap.GetComponent<Image>();
-            _pitStatusBannerTxt = CreateLabel(_pitStatusBannerWrap.transform, "", 17, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, new Vector2(14, 0), new Vector2(-14, 0));
-            _pitStatusBannerWrap.SetActive(false);
-
-            // Top-Right Action Pills (SFX, TOWER, CAM, PAUSE — crisp clean text badges, zero emojis!)
-            var sfxGo = CreateActionButton(_panelHud.transform, "SFX ON", new Vector2(1, 1), new Vector2(-458, -46), new Vector2(104, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { if (_gm.audioSynth != null) { _gm.audioSynth.audioEnabled = !_gm.audioSynth.audioEnabled; if (_sfxBtnTxt != null) _sfxBtnTxt.text = _gm.audioSynth.audioEnabled ? "SFX ON" : "MUTED"; } });
-            _sfxBtnTxt = sfxGo.GetComponentInChildren<Text>();
-            CreateActionButton(_panelHud.transform, "TOWER", new Vector2(1, 1), new Vector2(-340, -46), new Vector2(108, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { _gm.fullLeaderboard = !_gm.fullLeaderboard; _gm.audioSynth?.TriggerClick(); });
-            CreateActionButton(_panelHud.transform, "CAM",   new Vector2(1, 1), new Vector2(-218, -46), new Vector2(108, 46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => { _gm.cameraRig.CycleCamera(); _gm.audioSynth?.TriggerClick(); });
-            CreateActionButton(_panelHud.transform, "II",    new Vector2(1, 1), new Vector2(-96,  -46), new Vector2(88,  46), new Color(0.08f, 0.10f, 0.14f, 0.85f), () => _gm.SetScreenState(MotoveloScreenState.Paused));
-
-            // Top-Right Monoposto Telemetry Cluster
-            var cluster = CreatePanel(_panelHud.transform, new Vector2(1, 1), new Vector2(1, 1), new Vector2(-396, -304), new Vector2(-24, -84), new Color(0.05f, 0.06f, 0.09f, 0.84f), true);
-
-            // 11 RPM Shift Dots
+            // 11 RPM Shift Dots across top of Center Pod
             for (int i = 0; i < 11; i++)
             {
-                float dx = -140f + i * 28f;
-                var dot = CreatePanel(cluster.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(dx - 8, -28), new Vector2(dx + 8, -12), new Color(1, 1, 1, 0.16f));
+                float dx = -80f + i * 16f;
+                var dot = CreatePanel(centerCard.transform, new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(dx - 4.5f, -18), new Vector2(dx + 4.5f, -9), new Color(1, 1, 1, 0.16f));
                 dot.GetComponent<Image>().sprite = _circleSprite;
                 _rpmDots[i] = dot.GetComponent<Image>();
             }
 
-            _hudGearTxt = CreateLabel(cluster.transform, "N", 62, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0.5f, 0.36f), new Vector2(0.5f, 0.85f), new Vector2(-50, 0), new Vector2(50, 0));
-            _hudSpeedTxt = CreateLabel(cluster.transform, "0 KPH", 26, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.35f, 1f, 0.55f), new Vector2(0, 0.44f), new Vector2(0.45f, 0.82f), new Vector2(16, 0), Vector2.zero);
+            // Acid-Lime Gear Square
+            var gearBox = CreatePanel(centerCard.transform, new Vector2(0.5f, 0.56f), new Vector2(0.5f, 0.56f), new Vector2(-34, -26), new Vector2(34, 34), new Color(0.83f, 1.0f, 0.0f, 1f), true);
+            _hudGearTxt = CreateLabel(gearBox.transform, "N", 38, FontStyle.BoldAndItalic, TextAnchor.MiddleCenter, new Color(0.05f, 0.06f, 0.08f, 1f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            _hudGearSubTxt = CreateLabel(centerCard.transform, "NEUTRAL", 11, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.70f, 0.74f, 0.80f), new Vector2(0, 0.24f), new Vector2(1, 0.38f), Vector2.zero, Vector2.zero);
 
-            var drsPill = CreatePanel(cluster.transform, new Vector2(0.56f, 0.50f), new Vector2(0.96f, 0.76f), Vector2.zero, Vector2.zero, new Color(0.16f, 0.18f, 0.22f, 0.9f), true);
+            // Bottom Mode Pills inside Center Pod: OVERTAKE + X ARMED (DRS)
+            var ovtPill = CreatePanel(centerCard.transform, new Vector2(0.06f, 0.06f), new Vector2(0.49f, 0.23f), Vector2.zero, Vector2.zero, new Color(0.14f, 0.17f, 0.22f, 0.95f), true);
+            _overtakePillBg = ovtPill.GetComponent<Image>();
+            _overtakePillTxt = CreateLabel(ovtPill.transform, "OVERTAKE", 10, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.85f, 0.90f, 0.96f), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+            var drsPill = CreatePanel(centerCard.transform, new Vector2(0.51f, 0.06f), new Vector2(0.94f, 0.23f), Vector2.zero, Vector2.zero, new Color(0.14f, 0.17f, 0.22f, 0.95f), true);
             _drsBadgeBg = drsPill.GetComponent<Image>();
-            _drsBadgeTxt = CreateLabel(drsPill.transform, "DRS", 14, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            _drsBadgeTxt = CreateLabel(drsPill.transform, "DRS", 10, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-            _hudTimeTxt = CreateLabel(cluster.transform, "LAP  00:00.000", 16, FontStyle.Bold, TextAnchor.MiddleLeft, Color.white, new Vector2(0, 0.22f), new Vector2(1, 0.42f), new Vector2(16, 0), new Vector2(-16, 0));
-            _hudBestTxt = CreateLabel(cluster.transform, "BEST --:--.---", 15, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.35f, 1f, 0.55f), new Vector2(0, 0.22f), new Vector2(1, 0.42f), new Vector2(16, 0), new Vector2(-16, 0));
-            _hudSectorsTxt = CreateLabel(cluster.transform, "S1 --.-   S2 --.-   S3 --.-", 13, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.75f, 0.80f, 0.88f), new Vector2(0, 0.08f), new Vector2(1, 0.24f), Vector2.zero, Vector2.zero);
-
-            var ersTrack = CreatePanel(cluster.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(16, 8), new Vector2(-16, 16), new Color(1, 1, 1, 0.15f));
-            var ersFill = CreatePanel(ersTrack.transform, new Vector2(0, 0), new Vector2(1, 1), Vector2.zero, Vector2.zero, new Color(0.15f, 0.86f, 1f, 1f));
-            _ersBarFill = ersFill.GetComponent<Image>();
+            // Left Circular Gauge: BATT (ERS)
+            var battBg = CreatePanel(podWrap.transform, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, -68), new Vector2(136, 68), new Color(0.05f, 0.06f, 0.09f, 0.94f));
+            battBg.GetComponent<Image>().sprite = _circleSprite;
+            var battTrack = CreatePanel(battBg.transform, Vector2.zero, Vector2.one, new Vector2(4, 4), new Vector2(-4, -4), new Color(1f, 1f, 1f, 0.12f));
+            battTrack.GetComponent<Image>().sprite = _ringSprite;
+            var battFillGo = CreatePanel(battBg.transform, Vector2.zero, Vector2.one, new Vector2(4, 4), new Vector2(-4, -4), new Color(0.0f, 0.88f, 1.0f, 1f));
+            _ersBarFill = battFillGo.GetComponent<Image>();
+            _ersBarFill.sprite = _ringSprite;
             _ersBarFill.type = Image.Type.Filled;
-            _ersBarFill.fillMethod = Image.FillMethod.Horizontal;
+            _ersBarFill.fillMethod = Image.FillMethod.Radial360;
+            _ersBarFill.fillOrigin = (int)Image.Origin360.Bottom;
+            _ersBarFill.fillClockwise = true;
+            CreateLabel(battBg.transform, "BATT", 12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.68f, 0.74f, 0.82f), new Vector2(0, 0.62f), new Vector2(1, 0.82f), Vector2.zero, Vector2.zero);
+            _battPctTxt = CreateLabel(battBg.transform, "100%", 28, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0, 0.25f), new Vector2(1, 0.65f), Vector2.zero, Vector2.zero);
 
-            // Ergonomic Translucent Bottom Touch Controls
-            _btnLeft  = CreateHoldControl(_panelHud.transform, "<",     new Vector2(0, 0), new Vector2(118, 118), new Vector2(146, 146), 54, new Color(1, 1, 1, 0.18f), true);
-            _btnRight = CreateHoldControl(_panelHud.transform, ">",     new Vector2(0, 0), new Vector2(292, 118), new Vector2(146, 146), 54, new Color(1, 1, 1, 0.18f), true);
+            // Right Circular Gauge: KM/H + RPM
+            var spdBg = CreatePanel(podWrap.transform, new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-136, -68), new Vector2(0, 68), new Color(0.05f, 0.06f, 0.09f, 0.94f));
+            spdBg.GetComponent<Image>().sprite = _circleSprite;
+            var spdTrack = CreatePanel(spdBg.transform, Vector2.zero, Vector2.one, new Vector2(4, 4), new Vector2(-4, -4), new Color(1f, 1f, 1f, 0.12f));
+            spdTrack.GetComponent<Image>().sprite = _ringSprite;
+            var spdFillGo = CreatePanel(spdBg.transform, Vector2.zero, Vector2.one, new Vector2(4, 4), new Vector2(-4, -4), Color.white);
+            _speedRingFill = spdFillGo.GetComponent<Image>();
+            _speedRingFill.sprite = _ringSprite;
+            _speedRingFill.type = Image.Type.Filled;
+            _speedRingFill.fillMethod = Image.FillMethod.Radial360;
+            _speedRingFill.fillOrigin = (int)Image.Origin360.Bottom;
+            _speedRingFill.fillClockwise = true;
+            CreateLabel(spdBg.transform, "KM/H", 12, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.68f, 0.74f, 0.82f), new Vector2(0, 0.64f), new Vector2(1, 0.84f), Vector2.zero, Vector2.zero);
+            _hudSpeedTxt = CreateLabel(spdBg.transform, "0", 34, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, new Vector2(0, 0.30f), new Vector2(1, 0.68f), Vector2.zero, Vector2.zero);
+            _hudRpmTxt = CreateLabel(spdBg.transform, "4800 rpm", 11, FontStyle.Bold, TextAnchor.MiddleCenter, new Color(0.68f, 0.74f, 0.82f), new Vector2(0, 0.14f), new Vector2(1, 0.32f), Vector2.zero, Vector2.zero);
 
-            _btnBrake = CreateHoldControl(_panelHud.transform, "BRAKE", new Vector2(1, 0), new Vector2(-304, 112), new Vector2(158, 128), 20, new Color(0.90f, 0.16f, 0.20f, 0.28f), false);
-            _btnGas   = CreateHoldControl(_panelHud.transform, "GAS",   new Vector2(1, 0), new Vector2(-118, 134), new Vector2(148, 174), 22, new Color(0.18f, 0.90f, 0.42f, 0.28f), false);
+            // -----------------------------------------------------------------
+            // BOTTOM-RIGHT: LIBRECORSA ASSIST PILL + TYRE/DAMAGE SILHOUETTE CARD
+            // -----------------------------------------------------------------
+            var assistOuter = CreatePanel(_panelHud.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-326, 206), new Vector2(-24, 240), cardBorder, true);
+            var assistCard = CreatePanel(assistOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
+            _assistPillTxt = CreateLabel(assistCard.transform, "ELEC  •  ASSIST ON  •  AERO -15", 12, FontStyle.Bold, TextAnchor.MiddleLeft, new Color(0.86f, 0.90f, 0.96f), new Vector2(0, 0), new Vector2(0.68f, 1), new Vector2(12, 0), Vector2.zero);
 
-            _btnErs   = CreateHoldControl(_panelHud.transform, "ERS",   new Vector2(0.5f, 0), new Vector2(-195, 96), new Vector2(96, 96), 20, new Color(0.18f, 0.55f, 1.0f, 0.45f), true);
-            _btnDrs   = CreateHoldControl(_panelHud.transform, "DRS",   new Vector2(0.5f, 0), new Vector2(195,  96), new Vector2(96, 96), 20, new Color(0.16f, 0.88f, 0.40f, 0.40f), true);
-            _btnRear  = CreateHoldControl(_panelHud.transform, "REAR",  new Vector2(0.5f, 0), new Vector2(-74,  86), new Vector2(82, 82), 16, new Color(1f, 1f, 1f, 0.20f), true);
-
-            // Pit Radio Next-Tyre Strategy Selector (NO fake instant pit button — drive physically into the Pit Entry Lane to pit!)
-            var nextTyreGo = CreateActionButton(_panelHud.transform, "NEXT: MED", new Vector2(0.5f, 0), new Vector2(58, 86), new Vector2(138, 62), new Color(0.14f, 0.16f, 0.22f, 0.85f), () => _gm.CycleNextPitCompound());
+            var nextTyreGo = CreateActionButton(assistCard.transform, "NEXT: MED", new Vector2(1, 0.5f), new Vector2(-52, 0), new Vector2(96, 26), new Color(0.16f, 0.19f, 0.25f, 0.95f), () => _gm.CycleNextPitCompound());
             _pitBtnBg = nextTyreGo.GetComponent<Image>();
             _nextTyreBtnTxt = nextTyreGo.GetComponentInChildren<Text>();
-            if (_nextTyreBtnTxt != null) _nextTyreBtnTxt.fontSize = 15;
+            if (_nextTyreBtnTxt != null) _nextTyreBtnTxt.fontSize = 11;
+
+            var tyreOuter = CreatePanel(_panelHud.transform, new Vector2(1, 0), new Vector2(1, 0), new Vector2(-326, 20), new Vector2(-24, 198), cardBorder, true);
+            var tyreCard = CreatePanel(tyreOuter.transform, Vector2.zero, Vector2.one, new Vector2(1.5f, 1.5f), new Vector2(-1.5f, -1.5f), cardBg, true);
+
+            // Top-down F1 Car Silhouette in Center of Card
+            var silColor = new Color(0.50f, 0.55f, 0.64f, 0.85f);
+            CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), new Vector2(-22, 34), new Vector2(22, 42), silColor, true); // Front wing
+            CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), new Vector2(-6, -34), new Vector2(6, 40), silColor, true);   // Nose/spine
+            CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), new Vector2(-16, -24), new Vector2(16, 12), silColor, true); // Sidepods
+            CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), new Vector2(-20, -40), new Vector2(20, -33), silColor, true); // Rear wing
+
+            // 4 Wheel Rects on Silhouette + 4 Circular Tyre Health Rings (FL, FR, RL, RR)
+            Vector2[] wheelAnchors = {
+                new Vector2(-24, 18), new Vector2(24, 18),
+                new Vector2(-24, -22), new Vector2(24, -22)
+            };
+            Vector2[] ringOffsets = {
+                new Vector2(-92, 34), new Vector2(92, 34),
+                new Vector2(-92, -26), new Vector2(92, -26)
+            };
+            for (int w = 0; w < 4; w++)
+            {
+                var wr = CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), wheelAnchors[w] - new Vector2(5, 9), wheelAnchors[w] + new Vector2(5, 9), new Color(0.15f, 0.92f, 0.45f, 1f), true);
+                _carTyreRects[w] = wr.GetComponent<Image>();
+
+                var tRingTrack = CreatePanel(tyreCard.transform, new Vector2(0.5f, 0.54f), new Vector2(0.5f, 0.54f), ringOffsets[w] - new Vector2(26, 26), ringOffsets[w] + new Vector2(26, 26), new Color(1f, 1f, 1f, 0.14f));
+                tRingTrack.GetComponent<Image>().sprite = _ringSprite;
+                var tRingFill = CreatePanel(tRingTrack.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, new Color(0.15f, 0.92f, 0.45f, 1f));
+                var rImg = tRingFill.GetComponent<Image>();
+                rImg.sprite = _ringSprite;
+                rImg.type = Image.Type.Filled;
+                rImg.fillMethod = Image.FillMethod.Radial360;
+                rImg.fillOrigin = (int)Image.Origin360.Top;
+                rImg.fillClockwise = true;
+                _tyreRings[w] = rImg;
+                _tyrePcts[w] = CreateLabel(tRingTrack.transform, "100%", 12, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            }
+
+            // Bottom row of Tyre Card: Compound Badge + Status
+            CreatePanel(tyreCard.transform, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 30), new Vector2(0, 31), dividerCol);
+            var cBadge = CreatePanel(tyreCard.transform, new Vector2(0, 0), new Vector2(0, 0), new Vector2(12, 5), new Vector2(32, 25), new Color(0.88f, 0.12f, 0.18f, 1f));
+            _cardCompoundBg = cBadge.GetComponent<Image>();
+            _cardCompoundBg.sprite = _circleSprite;
+            _cardCompoundTxt = CreateLabel(cBadge.transform, "S", 12, FontStyle.Bold, TextAnchor.MiddleCenter, Color.white, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            _damageStatusTxt = CreateLabel(tyreCard.transform, "NO DAMAGE", 12, FontStyle.Bold, TextAnchor.MiddleRight, new Color(0.75f, 0.80f, 0.86f), new Vector2(0.25f, 0), new Vector2(1, 0), Vector2.zero, new Vector2(-14, 30));
+
+            // -----------------------------------------------------------------
+            // ERGONOMIC TRANSLUCENT TOUCH CONTROLS (PRESERVED!)
+            // -----------------------------------------------------------------
+            _btnLeft  = CreateHoldControl(_panelHud.transform, "<",     new Vector2(0, 0), new Vector2(102, 102), new Vector2(132, 132), 48, new Color(1, 1, 1, 0.16f), true);
+            _btnRight = CreateHoldControl(_panelHud.transform, ">",     new Vector2(0, 0), new Vector2(256, 102), new Vector2(132, 132), 48, new Color(1, 1, 1, 0.16f), true);
+
+            _btnBrake = CreateHoldControl(_panelHud.transform, "BRAKE", new Vector2(1, 0), new Vector2(-510, 96), new Vector2(124, 106), 17, new Color(0.90f, 0.16f, 0.20f, 0.26f), false);
+            _btnGas   = CreateHoldControl(_panelHud.transform, "GAS",   new Vector2(1, 0), new Vector2(-380, 114), new Vector2(118, 144), 19, new Color(0.18f, 0.90f, 0.42f, 0.26f), false);
+
+            _btnErs   = CreateHoldControl(_panelHud.transform, "ERS",   new Vector2(0.5f, 0), new Vector2(-286, 84), new Vector2(76, 76), 16, new Color(0.0f, 0.72f, 0.95f, 0.36f), true);
+            _btnDrs   = CreateHoldControl(_panelHud.transform, "DRS",   new Vector2(0.5f, 0), new Vector2(286, 84),  new Vector2(76, 76), 16, new Color(0.16f, 0.88f, 0.40f, 0.36f), true);
+            _btnRear  = CreateHoldControl(_panelHud.transform, "REAR",  new Vector2(0.5f, 0), new Vector2(-286, 174), new Vector2(68, 40), 13, new Color(1f, 1f, 1f, 0.18f), false);
         }
 
         // =====================================================================
@@ -575,6 +797,19 @@ namespace Motovelo
             // Hide touch steer buttons when tilt steering is active for clean screen!
             if (_btnLeft != null)  _btnLeft.gameObject.SetActive(!_gm.tiltSteering);
             if (_btnRight != null) _btnRight.gameObject.SetActive(!_gm.tiltSteering);
+            if (_minimapWrapRt != null)
+            {
+                if (_gm.tiltSteering)
+                {
+                    _minimapWrapRt.offsetMin = new Vector2(24, 20);
+                    _minimapWrapRt.offsetMax = new Vector2(224, 180);
+                }
+                else
+                {
+                    _minimapWrapRt.offsetMin = new Vector2(24, 198);
+                    _minimapWrapRt.offsetMax = new Vector2(224, 358);
+                }
+            }
 
             SyncAllLabels();
         }
@@ -627,52 +862,92 @@ namespace Motovelo
             if (car == null) return;
 
             bool inCountdown = _gm.state == MotoveloScreenState.Countdown;
-            _startLightsWrap.SetActive(inCountdown);
-            if (inCountdown)
+            if (_wasInCountdown && !inCountdown && _gm.state == MotoveloScreenState.Racing)
+                _lightsOutBannerTimer = 1.4f;
+            _wasInCountdown = inCountdown;
+            if (_lightsOutBannerTimer > 0f) _lightsOutBannerTimer -= Time.deltaTime;
+
+            bool showLights = inCountdown || _lightsOutBannerTimer > 0f;
+            _startLightsWrap.SetActive(showLights);
+            if (showLights)
             {
                 for (int i = 0; i < 5; i++)
-                    _startLightLenses[i].color = i < _gm.litStartPods
-                        ? new Color(1f, 0.10f, 0.14f, 1f)
-                        : new Color(0.18f, 0.03f, 0.04f, 1f);
+                {
+                    _startLightLenses[i].color = (inCountdown && i < _gm.litStartPods)
+                        ? new Color(1f, 0.12f, 0.16f, 1f)
+                        : new Color(0.16f, 0.18f, 0.22f, 0.9f);
+                }
+                if (_startLightsBannerTxt != null)
+                {
+                    if (!inCountdown) _startLightsBannerTxt.text = "LIGHTS OUT";
+                    else if (_gm.litStartPods == 0) _startLightsBannerTxt.text = "GRID READY";
+                    else _startLightsBannerTxt.text = $"LIGHTS {_gm.litStartPods}/5";
+                }
             }
 
-            _flBannerWrap.SetActive(_gm.fastestLapBannerTimer > 0f);
+            _flBannerWrap.SetActive(!showLights && _gm.fastestLapBannerTimer > 0f);
             if (_gm.fastestLapBannerTimer > 0f)
                 _flBannerTxt.text = $"FASTEST LAP  •  {_gm.fastestLapDriver}  {FormatTime(_gm.fastestLapTime)}";
 
+            // Center Telemetry Pod: Speed, Gear, RPM, Batt, Overtake, DRS
             int kph = Mathf.RoundToInt(car.speed * 3.6f);
-            _hudSpeedTxt.text = $"{kph} KPH";
-            _hudGearTxt.text = (inCountdown || car.speed < 0.4f) ? "N" : car.gear.ToString();
-            _hudLapTxt.text = $"LAP {car.lap}/{_gm.selectedLaps}   •   {car.compound.shortLetter} {Mathf.RoundToInt(car.tyreHealth)}%";
-            _hudTimeTxt.text = $"LAP  {FormatTime(_gm.raceTime - car.lapStartTime)}";
-            _hudBestTxt.text = $"BEST {FormatTime(car.bestLapTime)}";
+            bool isNeutral = inCountdown || car.speed < 0.4f;
+            if (_hudSpeedTxt != null) _hudSpeedTxt.text = kph.ToString();
+            if (_hudRpmTxt != null) _hudRpmTxt.text = $"{Mathf.RoundToInt(car.rpm)} rpm";
+            if (_speedRingFill != null)
+            {
+                _speedRingFill.fillAmount = Mathf.Clamp01(kph / 340f);
+                _speedRingFill.color = kph > 290 ? new Color(0.83f, 1.0f, 0.0f, 1f) : Color.white;
+            }
+            if (_hudGearTxt != null) _hudGearTxt.text = isNeutral ? "N" : car.gear.ToString();
+            if (_hudGearSubTxt != null) _hudGearSubTxt.text = isNeutral ? "NEUTRAL" : $"GEAR {car.gear}";
 
+            if (_hudTimeTxt != null) _hudTimeTxt.text = FormatTime(_gm.raceTime - car.lapStartTime);
+            if (_hudBestTxt != null) _hudBestTxt.text = FormatTime(car.bestLapTime);
+
+            // BATT (ERS) Circular Gauge + Overtake Pill
+            if (_battPctTxt != null) _battPctTxt.text = $"{Mathf.RoundToInt(car.ersCharge * 100f)}%";
             _ersBarFill.fillAmount = car.ersCharge;
             _ersBarFill.color = car.ersActive
                 ? new Color(0.20f, 1.0f, 0.65f, 1f)
-                : (car.ersHarvesting ? new Color(0.75f, 0.38f, 1.0f, 1f) : new Color(0.15f, 0.86f, 1f, 1f));
+                : (car.ersHarvesting ? new Color(0.75f, 0.38f, 1.0f, 1f) : new Color(0.0f, 0.88f, 1.0f, 1f));
+
+            if (_overtakePillBg != null)
+            {
+                _overtakePillBg.color = car.ersActive
+                    ? new Color(0.0f, 0.82f, 0.95f, 0.95f)
+                    : (car.ersCharge > 0.1f ? new Color(0.16f, 0.20f, 0.28f, 0.95f) : new Color(0.12f, 0.13f, 0.17f, 0.8f));
+                if (_overtakePillTxt != null)
+                    _overtakePillTxt.color = car.ersActive ? new Color(0.04f, 0.05f, 0.08f, 1f) : new Color(0.85f, 0.90f, 0.96f, 1f);
+            }
 
             if (car.drsActive)
             {
-                _drsBadgeBg.color = new Color(0.10f, 0.88f, 0.34f, 1f);
-                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS OPEN";
+                _drsBadgeBg.color = new Color(0.10f, 0.88f, 0.45f, 1f);
+                if (_drsBadgeTxt != null) { _drsBadgeTxt.text = "DRS OPEN"; _drsBadgeTxt.color = new Color(0.04f, 0.05f, 0.08f, 1f); }
             }
             else if (car.inDrsZone)
             {
-                float pulse = 0.65f + Mathf.Sin(Time.time * 9f) * 0.25f;
-                _drsBadgeBg.color = new Color(0.18f, 0.62f, 0.24f, pulse);
-                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS ZONE [F]";
+                float pulse = 0.68f + Mathf.Sin(Time.time * 9f) * 0.25f;
+                _drsBadgeBg.color = new Color(0.0f, 0.78f, 0.88f, pulse);
+                if (_drsBadgeTxt != null) { _drsBadgeTxt.text = "X ARMED"; _drsBadgeTxt.color = Color.white; }
             }
             else
             {
-                _drsBadgeBg.color = new Color(0.16f, 0.18f, 0.22f, 0.9f);
-                if (_drsBadgeTxt != null) _drsBadgeTxt.text = "DRS";
+                _drsBadgeBg.color = new Color(0.14f, 0.17f, 0.22f, 0.95f);
+                if (_drsBadgeTxt != null) { _drsBadgeTxt.text = "DRS"; _drsBadgeTxt.color = new Color(0.70f, 0.75f, 0.82f, 1f); }
             }
 
-            // Next Pit Compound Strategy Pill
+            // Assist Pill & Next Pit Compound Strategy
             var nextComp = MotoveloDatabase.Compounds[Mathf.Clamp(car.nextPitCompoundIdx, 0, MotoveloDatabase.Compounds.Length - 1)];
             if (_nextTyreBtnTxt != null) _nextTyreBtnTxt.text = $"NEXT: {nextComp.label}";
-            if (_pitBtnBg != null) _pitBtnBg.color = new Color(nextComp.color.r * 0.65f, nextComp.color.g * 0.65f, nextComp.color.b * 0.65f, 0.82f);
+            if (_pitBtnBg != null) _pitBtnBg.color = new Color(nextComp.color.r * 0.65f, nextComp.color.g * 0.65f, nextComp.color.b * 0.65f, 0.92f);
+            if (_assistPillTxt != null)
+            {
+                string elecState = car.ersActive ? "DEPLOY" : (car.ersHarvesting ? "REGEN" : "ELEC");
+                string assistTag = _gm.drivingAssist ? "TC ON" : "TC OFF";
+                _assistPillTxt.text = $"{elecState}  •  {assistTag}  •  AERO {_gm.wingsSetup:+0;-0;0}";
+            }
 
             // Live FIA Pit Crew Stopwatch, Pit Limiter, Pit Entry Approach & Stewards Regulation Banner!
             if (_pitStatusBannerWrap != null && _gm.activeTrack != null)
@@ -735,39 +1010,139 @@ namespace Motovelo
             _hudFrameCount++;
             if (_hudFrameCount == 1 || _hudFrameCount % 6 == 0)
             {
+                // Header: LAP 1/3 or YELLOW FLAG
                 if (_gm.yellowFlagSector > 0)
                 {
                     _towerHeaderBg.color = new Color(0.98f, 0.78f, 0.08f, 0.96f);
-                    _towerHeaderTxt.color = Color.black;
-                    _towerHeaderTxt.text = $"YELLOW FLAG  S{_gm.yellowFlagSector}";
+                    _hudLapTxt.color = Color.black;
+                    _hudLapTxt.text = $"YELLOW FLAG S{_gm.yellowFlagSector}  •  LAP {car.lap}/{_gm.selectedLaps}";
                 }
                 else
                 {
-                    _towerHeaderBg.color = new Color(0.82f, 0.06f, 0.11f, 0.96f);
-                    _towerHeaderTxt.color = Color.white;
-                    _towerHeaderTxt.text = "MOTOVELO GP";
+                    _towerHeaderBg.color = new Color(0.08f, 0.10f, 0.14f, 0.92f);
+                    _hudLapTxt.color = Color.white;
+                    _hudLapTxt.text = $"LAP {car.lap}/{_gm.selectedLaps}";
                 }
 
-                _hudSectorsTxt.text = $"S1 {FormatSec(car.sectorTimes[0])}   S2 {FormatSec(car.sectorTimes[1])}   S3 {FormatSec(car.sectorTimes[2])}";
+                // Sector Strip
+                for (int s = 0; s < 3; s++)
+                {
+                    bool completed = car.sectorTimes[s] > 0f;
+                    bool current = (s == car.maxSectorReached);
+                    _sectorBars[s].color = current
+                        ? new Color(0.83f, 1.0f, 0.0f, 1f)
+                        : (completed ? new Color(0.15f, 0.92f, 0.45f, 0.9f) : new Color(1f, 1f, 1f, 0.14f));
+                    _sectorLabels[s].text = completed ? $"S{s + 1} {FormatSec(car.sectorTimes[s])}" : $"S{s + 1}";
+                    _sectorLabels[s].color = current ? Color.white : (completed ? new Color(0.35f, 1f, 0.55f) : new Color(0.68f, 0.72f, 0.80f));
+                }
 
+                // Weather & Tyre Temp Sub-Card
+                if (_weatherTempTxt != null) _weatherTempTxt.text = $"AIR 27°   TRACK 41°   DRY";
+                if (_weatherTrackTxt != null) _weatherTrackTxt.text = $"{car.compound.label} {Mathf.RoundToInt(car.tyreHealth)}%  •  {Mathf.RoundToInt(car.tyreTemp)}°C";
+
+                // Bottom-Right Tyre Rings & Car Damage Card
+                float healthFrac = Mathf.Clamp01(car.tyreHealth / 100f);
+                Color tyreRingCol = healthFrac > 0.55f
+                    ? new Color(0.15f, 0.92f, 0.45f, 1f)
+                    : (healthFrac > 0.28f ? new Color(0.98f, 0.74f, 0.12f, 1f) : new Color(0.95f, 0.16f, 0.22f, 1f));
+                int healthPct = Mathf.RoundToInt(car.tyreHealth);
+                for (int w = 0; w < 4; w++)
+                {
+                    if (_tyreRings[w] != null) { _tyreRings[w].fillAmount = healthFrac; _tyreRings[w].color = tyreRingCol; }
+                    if (_tyrePcts[w] != null) _tyrePcts[w].text = $"{healthPct}%";
+                    if (_carTyreRects[w] != null) _carTyreRects[w].color = tyreRingCol;
+                }
+                if (_cardCompoundBg != null) _cardCompoundBg.color = car.compound.color;
+                if (_cardCompoundTxt != null)
+                {
+                    _cardCompoundTxt.text = car.compound.shortLetter;
+                    _cardCompoundTxt.color = (car.compound.shortLetter == "M" || car.compound.shortLetter == "H") ? Color.black : Color.white;
+                }
+                if (_damageStatusTxt != null)
+                {
+                    if (car.timePenaltySeconds > 0f)
+                    {
+                        _damageStatusTxt.text = $"PENALTY +{car.timePenaltySeconds:F0}s";
+                        _damageStatusTxt.color = new Color(1f, 0.25f, 0.30f, 1f);
+                    }
+                    else if (healthPct < 35)
+                    {
+                        _damageStatusTxt.text = "TYRE WEAR CRITICAL";
+                        _damageStatusTxt.color = new Color(0.98f, 0.74f, 0.12f, 1f);
+                    }
+                    else
+                    {
+                        _damageStatusTxt.text = "NO DAMAGE";
+                        _damageStatusTxt.color = new Color(0.75f, 0.80f, 0.86f, 1f);
+                    }
+                }
+
+                // Standings & Leaderboard Rows
                 var standings = _gm.GetStandings();
                 int pIdx = standings.IndexOf(car);
-                int maxRows = _gm.fullLeaderboard ? Mathf.Min(14, standings.Count) : Mathf.Min(5, standings.Count);
+                if (_hudPosBigTxt != null) _hudPosBigTxt.text = $"{pIdx + 1}";
+                if (_hudPosTotalTxt != null) _hudPosTotalTxt.text = $"/{standings.Count}";
+
+                int maxRows = _gm.fullLeaderboard ? Mathf.Min(_towerRows.Count, standings.Count) : Mathf.Min(5, standings.Count);
                 int start = _gm.fullLeaderboard ? 0 : Mathf.Clamp(pIdx - 2, 0, Mathf.Max(0, standings.Count - maxRows));
                 float leadProg = standings.Count > 0 ? standings[0].totalProgress : 0f;
 
-                var sb = new StringBuilder();
-                for (int i = start; i < Mathf.Min(standings.Count, start + maxRows); i++)
+                // Resize tower height dynamically when expanded
+                if (_towerHeaderBg != null && _towerHeaderBg.transform.parent != null && _towerHeaderBg.transform.parent.parent != null)
                 {
-                    var c = standings[i];
-                    string penTag = c.timePenaltySeconds > 0f ? $" +{c.timePenaltySeconds:F0}sP" : "";
-                    string gap = c.inPit ? "PIT" : (i == 0 ? $"LEADER{penTag}" : $"+{Mathf.Max(0f, (leadProg - c.totalProgress) * 58f + c.timePenaltySeconds):F2}s{penTag}");
-                    string prefix = c.isPlayer ? "<color=#38FF6A>> " : "  ";
-                    string suffix = c.isPlayer ? "</color>" : "";
-                    sb.AppendLine($"{prefix}{i + 1:D2}  {c.driver.code}  [{c.compound.shortLetter}]  {gap}{suffix}");
+                    var outerRt = _towerHeaderBg.transform.parent.parent.GetComponent<RectTransform>();
+                    if (outerRt != null)
+                    {
+                        float totalH = 38f + maxRows * 32f + 40f;
+                        outerRt.offsetMin = new Vector2(24f, -20f - totalH);
+                    }
                 }
-                _towerBodyTxt.supportRichText = true;
-                _towerBodyTxt.text = sb.ToString();
+
+                Color limeHighlight = new Color(0.78f, 0.96f, 0.0f, 0.98f);
+                Color darkText = new Color(0.05f, 0.06f, 0.08f, 1f);
+                for (int r = 0; r < _towerRows.Count; r++)
+                {
+                    int sIdx = start + r;
+                    bool active = r < maxRows && sIdx < standings.Count;
+                    var row = _towerRows[r];
+                    row.root.SetActive(active);
+                    if (!active) continue;
+
+                    var c = standings[sIdx];
+                    string penTag = c.timePenaltySeconds > 0f ? $" +{c.timePenaltySeconds:F0}s" : "";
+                    string gap = c.inPit ? "PIT" : (sIdx == 0 ? $"LEADER{penTag}" : $"+{Mathf.Max(0f, (leadProg - c.totalProgress) * 58f + c.timePenaltySeconds):F3}{penTag}");
+
+                    row.bg.color = c.isPlayer ? limeHighlight : Color.clear;
+                    row.posTxt.text = $"{sIdx + 1}";
+                    row.posTxt.color = c.isPlayer ? darkText : new Color(0.75f, 0.78f, 0.85f);
+                    row.teamBar.color = c.team.primaryColor;
+                    row.codeTxt.text = c.driver.code;
+                    row.codeTxt.color = c.isPlayer ? darkText : Color.white;
+                    row.tyreBg.color = c.compound.color;
+                    row.tyreTxt.text = c.compound.shortLetter;
+                    row.tyreTxt.color = (c.compound.shortLetter == "M" || c.compound.shortLetter == "H") ? Color.black : Color.white;
+                    row.gapTxt.text = gap;
+                    row.gapTxt.color = c.isPlayer ? darkText : new Color(0.88f, 0.90f, 0.95f);
+                }
+
+                // AHEAD Footer
+                if (_aheadBarImg != null && _aheadCodeTxt != null && _aheadGapTxt != null)
+                {
+                    if (pIdx > 0 && pIdx < standings.Count)
+                    {
+                        var aheadCar = standings[pIdx - 1];
+                        float aheadGap = Mathf.Max(0f, (aheadCar.totalProgress - car.totalProgress) * 58f);
+                        _aheadBarImg.color = aheadCar.team.primaryColor;
+                        _aheadCodeTxt.text = aheadCar.driver.code;
+                        _aheadGapTxt.text = $"{aheadGap:F3}";
+                    }
+                    else
+                    {
+                        _aheadBarImg.color = car.team.primaryColor;
+                        _aheadCodeTxt.text = car.driver.code;
+                        _aheadGapTxt.text = "LEADER";
+                    }
+                }
 
                 DrawMinimapTexture();
             }
@@ -816,19 +1191,22 @@ namespace Motovelo
             float ox = (W - (maxX - minX) * scale) * 0.5f;
             float oz = (W - (maxZ - minZ) * scale) * 0.5f;
 
-            var roadCol = new Color32(200, 210, 225, 220);
             for (int i = 0; i < trk.samples.Length; i += 2)
             {
                 int px = Mathf.Clamp(Mathf.RoundToInt(ox + (trk.samples[i].pos.x - minX) * scale), 1, W - 2);
                 int py = Mathf.Clamp(Mathf.RoundToInt(oz + (trk.samples[i].pos.z - minZ) * scale), 1, W - 2);
-                PlotDot(px, py, 1, roadCol);
+                float t = (float)i / Mathf.Max(1, trk.samples.Length);
+                Color32 secCol = t < 0.333f
+                    ? new Color32(45, 220, 130, 235)
+                    : (t < 0.666f ? new Color32(0, 200, 255, 235) : new Color32(255, 85, 130, 235));
+                PlotDot(px, py, 1, secCol);
             }
 
             foreach (var c in _gm.cars)
             {
                 int cx = Mathf.Clamp(Mathf.RoundToInt(ox + (c.transform.position.x - minX) * scale), 2, W - 3);
                 int cy = Mathf.Clamp(Mathf.RoundToInt(oz + (c.transform.position.z - minZ) * scale), 2, W - 3);
-                Color32 col = c.isPlayer ? new Color32(40, 255, 90, 255) : (Color32)c.team.primaryColor;
+                Color32 col = c.isPlayer ? new Color32(210, 255, 0, 255) : (Color32)c.team.primaryColor;
                 PlotDot(cx, cy, c.isPlayer ? 3 : 2, col);
             }
 
@@ -994,6 +1372,26 @@ namespace Motovelo
                     float dist = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
                     float alpha = Mathf.Clamp01(r + 0.6f - dist);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                }
+            }
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        }
+
+        private static Sprite CreateRingSprite(int size, int thickness)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            float outerR = (size - 2) * 0.5f;
+            float innerR = outerR - thickness;
+            float c = (size - 1) * 0.5f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dist = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                    float outerAlpha = Mathf.Clamp01(outerR + 0.6f - dist);
+                    float innerAlpha = Mathf.Clamp01(dist - innerR + 0.6f);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, outerAlpha * innerAlpha));
                 }
             }
             tex.Apply();
