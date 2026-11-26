@@ -6,8 +6,8 @@
   },
   "outcome": "success",
   "exitCode": 0,
-  "startedAt": "2026-11-25T18:09:02.311Z",
-  "endedAt": "2026-11-25T18:10:41.518Z",
+  "startedAt": "2026-11-26T17:40:14.082Z",
+  "endedAt": "2026-11-26T17:44:55.822Z",
   "editor": {
     "version": "6000.3.29f1",
     "changeset": "96d2fe17529c",
@@ -16,11 +16,11 @@
   "build": {
     "target": "Android",
     "executeMethod": "Motovelo.Editor.MotoveloBuilder.BuildAndroidApk",
-    "logFile": "Logs/build-Android-1795630142147.log"
+    "logFile": "Logs/build-Android-1795714812646.log"
   },
   "source": {
     "vcs": "git",
-    "revision": "e439c359a1ba657aeb8beb99c7ef27b724a038aa",
+    "revision": "d86274190e9333b0498134c191aeb62e651827e8",
     "dirty": true
   },
   "packages": {
