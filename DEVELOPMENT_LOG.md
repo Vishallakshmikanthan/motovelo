@@ -42,3 +42,14 @@
 - **Play Mode & Dual Build Verification**:
   - Verified in Unity 6.3 LTS Play Mode (`0` console errors; `snappedService=True`, `jackBodyY=0.150m`, `pitStops=1`, `newCompound=MED`, `tyreHealth=100%`, `mandatoryOk=True`).
   - Rebuilt `MOTOVELO-WebGL/` (`15.1 MB` `.wasm`) and v2-signed `MOTOVELO.apk` (`54.8 MB` ARM64 IL2CPP).
+
+---
+
+## Session 5 — 2026-11-26: LibreCorsa Broadcast HUD Redesign & Android APK Release
+- **LibreCorsa-Style Broadcast Racing HUD (`MotoveloUIManager.cs`)**:
+  - Top-left broadcast leaderboard card with constructor color bars, Pirelli tyre compound badges, acid-lime player highlight row, and live `AHEAD` gap footer.
+  - Top-center 5-pod start lights & `LIGHTS OUT` banner alongside fastest-lap and FIA Pit Crew Stopwatch / Steward Regulation banners.
+  - Top-right `S1 | S2 | S3` live sector strip, position/lap-time timing card, air/track/tyre weather card, and compact `SFX ON`, `TOWER`, `CAM`, and `II` action pills.
+  - Bottom-left sector-colored GPS circuit minimap, bottom-center `BATT` & `KM/H` radial 360° ring gauges flanking the acid-lime gear pod (`11` RPM LEDs + `OVERTAKE` & `DRS` badges), and bottom-right top-down F1 chassis silhouette card with 4 radial wheel-wear rings and `NEXT: MED` pit compound radio selector.
+- **Signed Android APK Build**:
+  - Compiled and v2-signed `MOTOVELO.apk` (`54.87 MB`, Unity 6.3 LTS IL2CPP ARM64, `OpenGLES3`) with zero build errors.
